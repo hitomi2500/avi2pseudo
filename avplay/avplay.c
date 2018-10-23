@@ -1,20 +1,16 @@
 #include <mem.h>
 #include <apogey/screen_constrcutor.h>
 #include <fs/fs.h>
-//#include <apogey/video.h>
 #include <apogey/bios.h>
-//#include "gprint.h"
 #include "unpack_btree1.h"
-
-unsigned int FrameSize = 3840;
-//char aStart[6] = "STARTX";
-//char aFilename[16]="VIDEO/APPLE.APVX";
 
 void main() {
   int i,j;
   char c;
   void * FifoReadPointer;
   void * FifoWritePointer;
+  int iNumberOfFrames;
+  int iFrameCounter;
 
   asm {
      MVI  A, 1		; ‚ерсиЯ контроллера
@@ -32,11 +28,19 @@ void main() {
 
   apogeyScreen3A();
 
-//  fs_open("VIDEO/ONYOUR.APV");
   fs_open("VIDEO/APPLE.APV");
   
-  //FIFO from 4000 to BFFF - 32 KB total, 8 full frames / 80 packed frames
+  //read header
+  asm{
+	LXI D, 04000h
+	LXI H, 00100h ; header 256 bytes
+    MVI  A, 004h;read command
+	CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
+	LHLD 04004h 
+	SHLD main_iNumberOfFrames
+  }	  
   
+  //FIFO from 4000 to BFFF - 32 KB total, 8 full frames / 80 packed frames
 asm{
 	  LXI H, 04000h
 	  SHLD main_FifoReadPointer
@@ -49,15 +53,23 @@ asm{
 	XCHG
 	LXI H, 03000h ; размер передачи 12k
     MVI  A, 004h;read command
-	;EMUUU CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
 	CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
 	LXI H, 07000h
 	SHLD main_FifoWritePointer
 	;DI ;for debug
   }	  
   
+  iFrameCounter = iNumberOfFrames;
+  
   asm{
 Main_Loop_Start:
+	LHLD main_iFrameCounter
+	XRA A ; A=0
+	CMP H
+	JNZ Fifo_Write_Start
+	CMP L
+	JNZ Fifo_Write_Start
+	JMP Do_Exit
 Fifo_Write_Start:
 	; first check if we have enough free space in fifo, granularity is 1024 bytes
 	; fifo is almost full when either (write!=7C00 and read-write>0 and read-write-8 < 0), or ( write=7C00 and (read> 7C00 or read < 4400) )
@@ -91,7 +103,6 @@ Fifo_Write_Do:
 	XCHG
 	LXI H, 00400h ; размер передачи 1024 байт
     MVI  A, 004h;read command
-	;EMUUU CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
 	CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
 	LHLD main_FifoWritePointer
 	MVI A, 004h
@@ -128,7 +139,11 @@ Fifo_Read_Normal:
 	;normal case, diff (write - read) is already in A, checking if its bigger than 16
 	SUI 010h
 	JM Main_Loop_Start ;it is NOT bigger, meaning FIFO is almost empty, skipping read	
-Fifo_Read_Do:	
+Fifo_Read_Do:
+	;decrease frame counter
+	LHLD main_iFrameCounter
+	DCX H
+	SHLD main_iFrameCounter
 	;okay, FIFO is not empty, but current frame might be wrapping around FIFO end
 	;we check this by adding frame size to read pointer
 	LHLD main_FifoReadPointer
@@ -137,7 +152,6 @@ Fifo_Read_Do:
 	MOV E,M
 	INX H
 	MOV D,M
-	;LXI D,0224h ;EMUUU 
 	INX H
 	DAD D
 	MOV A,H
@@ -150,7 +164,6 @@ Fifo_Read_Do:
 	MOV A,B
 	ANI 00Fh
 	MOV B,A ;now we have a size in BC
-	;LXI B,0024h ;EMUUU 
 	LXI H, 04000h
 	LXI D, 08000h
 Fifo_Read_Copy_Loop:
@@ -166,7 +179,6 @@ Fifo_Read_Copy_Loop:
 	JNZ Fifo_Read_Copy_Loop
 	;copy done, now processing frame as-is
 	LHLD main_FifoReadPointer
-	;EMUUU CALL unpack_btree1
 	CALL unpack_btree1
 	;now move read pointer
 	LHLD main_FifoReadPointer
@@ -175,7 +187,6 @@ Fifo_Read_Copy_Loop:
 	MOV E,M
 	INX H
 	MOV D,M
-	;LXI D,0133h ;EMUUU 
 	INX H
 	DAD D
 	MOV A,H
@@ -187,7 +198,6 @@ Fifo_Read_Copy_Loop:
 Fifo_Read_Do2:	
 	;non-wrapped unpack
 	LHLD main_FifoReadPointer
-	;EMUUU CALL unpack_btree1
 	CALL unpack_btree1
 	;now move read pointer
 	LHLD main_FifoReadPointer
@@ -196,138 +206,17 @@ Fifo_Read_Do2:
 	MOV E,M
 	INX H
 	MOV D,M
-	;LXI D,0155h ;EMUUU 
 	INX H
 	DAD D
 	SHLD main_FifoReadPointer
 	JMP Main_Loop_Start ;go back to mail loop start
-	
-	
-	;Debug_Print:
-	LHLD main_FifoWritePointer
-	XCHG
-	LXI H, 0CF70h
-	MVI M, 0h
-	INX H
-	MOV A,D
-	ANI 0F0h
-	RRC
-	RRC
-	RRC
-	RRC
-	ADI 030h
-	CPI 03Ah
-	JM Debug_Skip1
-	ADI 007h
-Debug_Skip1:	
-	MOV M,A
-	INX H
-	MOV A,D
-	ANI 00Fh
-	ADI 030h
-	CPI 03Ah
-	JM Debug_Skip2
-	ADI 007h
-Debug_Skip2:	
-	MOV M,A
-	INX H
-	MOV A,E
-	ANI 0F0h
-	RRC
-	RRC
-	RRC
-	RRC
-	ADI 030h
-	CPI 03Ah
-	JM Debug_Skip3
-	ADI 007h
-Debug_Skip3:	
-	MOV M,A
-	INX H
-	MOV A,E
-	ANI 00Fh
-	ADI 030h
-	CPI 03Ah
-	JM Debug_Skip4
-	ADI 007h
-Debug_Skip4:	
-	MOV M,A
-	INX H
-	MVI M, 0h
-	INX H
-	MVI M, 0h
 
-	LHLD main_FifoReadPointer
-	XCHG
-	LXI H, 0CF77h
-	MOV A,D
-	ANI 0F0h
-	RRC
-	RRC
-	RRC
-	RRC
-	ADI 030h
-	CPI 03Ah
-	JM Debug_Skip5
-	ADI 007h
-Debug_Skip5:	
-	MOV M,A
-	INX H
-	MOV A,D
-	ANI 00Fh
-	ADI 030h
-	CPI 03Ah
-	JM Debug_Skip6
-	ADI 007h
-Debug_Skip6:	
-	MOV M,A
-	INX H
-	MOV A,E
-	ANI 0F0h
-	RRC
-	RRC
-	RRC
-	RRC
-	ADI 030h
-	CPI 03Ah
-	JM Debug_Skip7
-	ADI 007h
-Debug_Skip7:	
-	MOV M,A
-	INX H
-	MOV A,E
-	ANI 00Fh
-	ADI 030h
-	CPI 03Ah
-	JM Debug_Skip8
-	ADI 007h
-Debug_Skip8:	
-	MOV M,A
-	INX H
-	MVI M, 0h
-	INX H
-	MVI M, 0h
-	
-	;delay
-	LXI H,0F000h
-Delay_Loop:
-	DCX H
-	XRA A ; A=0
-	CMP H
-	JNZ Delay_Loop
-	CMP L
-	JNZ Delay_Loop
-	
-
-	
-	JMP Main_Loop_Start ;go back to mail loop start
+Do_Exit:
   }
-  
-  /*asm{
-  	LXI H,packed_frame ;packed frame address
-  }
-  unpack_btree1();*/
-  
-  while(1);
+	//restore video mode
+	apogeyScreen0();
+	asm {
+		JMP 0F875h ;jump to monitor
+	}
 	  
 }
