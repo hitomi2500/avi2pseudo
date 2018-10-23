@@ -380,6 +380,24 @@ void MainWindow::do_next_frame()
     }
     else
     {
+        //update header
+        QByteArray tmp;
+        tmp.clear();
+        tmp.append((char)0);//frame format
+        out_file->seek(0); //0 - header format
+        out_file->write(tmp);
+        tmp.clear();
+        tmp.append(ui->comboBox->currentIndex());//frame format
+        out_file->seek(1); //1 - frame format (0=192x102,1=128x60)
+        out_file->write(tmp);
+        tmp.clear();
+        tmp.append(iCurrentFrame%0x100);
+        tmp.append((iCurrentFrame/0x100)%0x100);
+        tmp.append((iCurrentFrame/0x10000)%0x100);
+        tmp.append((iCurrentFrame/0x1000000)%0x100);
+        out_file->seek(4); //4-7 - frames number
+        out_file->write(tmp);
+
         out_file->close();
         decoder->close();
     }
@@ -390,6 +408,7 @@ void MainWindow::on_pushButton_Convert_clicked()
     int i,j;
     out_file->setFileName(ui->lineEdit_Output->text());
     out_file->open(QIODevice::Truncate|QIODevice::ReadWrite);
+    out_file->write(QByteArray(256,(char)0));
     decoder->openFile(ui->lineEdit_Input->text());
     decoder->seekFrame(0);
     iCurrentFrame = 0;
