@@ -31,7 +31,8 @@ SOURCES += \
     codec_btree8.cpp \
     codec_btree4.cpp \
     codec_btree2.cpp \
-    codec_btree1.cpp
+    codec_btree1.cpp \
+    codec_btree1_radio.cpp
 
 HEADERS += \
         mainwindow.h \
@@ -39,7 +40,8 @@ HEADERS += \
     codec_btree8.h \
     codec_btree4.h \
     codec_btree2.h \
-    codec_btree1.h
+    codec_btree1.h \
+    codec_btree1_radio.h
 
 FORMS += \
         mainwindow.ui
