@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>400</width>
+    <height>300</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>MainWindow</string>
+  </property>
+  <widget class="QWidget" name="centralWidget">
+   <layout class="QGridLayout" name="gridLayout">
+    <item row="10" column="0">
+     <widget class="QPushButton" name="pushButton_Convert">
+      <property name="text">
+       <string>Convert</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="0">
+     <widget class="QLabel" name="label_3">
+      <property name="text">
+       <string>Input</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="0">
+     <widget class="QLabel" name="label_InputFrame">
+      <property name="text">
+       <string>InputFrame</string>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="1">
+     <widget class="QPushButton" name="pushButton_Select_Output">
+      <property name="text">
+       <string>Select</string>
+      </property>
+     </widget>
+    </item>
+    <item row="11" column="0">
+     <widget class="QPushButton" name="pushButton_Pause">
+      <property name="text">
+       <string>Pause</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="0">
+     <widget class="QLineEdit" name="lineEdit_Input"/>
+    </item>
+    <item row="5" column="1">
+     <widget class="QLabel" name="label_Delta_View">
+      <property name="text">
+       <string>Delta View</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="1">
+     <widget class="QLineEdit" name="lineEdit_Output"/>
+    </item>
+    <item row="1" column="0">
+     <widget class="QPushButton" name="pushButton_Select_Input">
+      <property name="text">
+       <string>Select</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="1">
+     <widget class="QLabel" name="label_OutputFrame">
+      <property name="text">
+       <string>OutputFrame</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="1">
+     <widget class="QLabel" name="label_4">
+      <property name="text">
+       <string>Output</string>
+      </property>
+     </widget>
+    </item>
+    <item row="9" column="0">
+     <widget class="QLabel" name="label_Errors">
+      <property name="text">
+       <string>Errors:0</string>
+      </property>
+     </widget>
+    </item>
+    <item row="5" column="3">
+     <widget class="QLabel" name="label_Delta_View2">
+      <property name="text">
+       <string>Delta View</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="3">
+     <widget class="QLabel" name="label_OutputFrameFilter">
+      <property name="text">
+       <string>OutputFilter</string>
+      </property>
+     </widget>
+    </item>
+    <item row="7" column="4">
+     <widget class="QLabel" name="label_Btrees4_2">
+      <property name="text">
+       <string>Btree4</string>
+      </property>
+     </widget>
+    </item>
+    <item row="7" column="2">
+     <widget class="QLabel" name="label_Btrees4_1">
+      <property name="text">
+       <string>Btree4</string>
+      </property>
+     </widget>
+    </item>
+    <item row="5" column="2">
+     <widget class="QLabel" name="label_Delta">
+      <property name="text">
+       <string>Delta:0</string>
+      </property>
+     </widget>
+    </item>
+    <item row="5" column="4">
+     <widget class="QLabel" name="label_Delta2">
+      <property name="text">
+       <string>Delta:0</string>
+      </property>
+     </widget>
+    </item>
+    <item row="6" column="1">
+     <widget class="QLabel" name="label_Btree_Reconstruct8_1">
+      <property name="text">
+       <string>Btree8 rec</string>
+      </property>
+     </widget>
+    </item>
+    <item row="6" column="2">
+     <widget class="QLabel" name="label_Btrees8_1">
+      <property name="text">
+       <string>Btree8</string>
+      </property>
+     </widget>
+    </item>
+    <item row="6" column="4">
+     <widget class="QLabel" name="label_Btrees8_2">
+      <property name="text">
+       <string>Btree8</string>
+      </property>
+     </widget>
+    </item>
+    <item row="6" column="3">
+     <widget class="QLabel" name="label_Btree_Reconstruct8_2">
+      <property name="text">
+       <string>Btree8 rec</string>
+      </property>
+     </widget>
+    </item>
+    <item row="7" column="1">
+     <widget class="QLabel" name="label_Btree_Reconstruct4_1">
+      <property name="text">
+       <string>Btree4 rec</string>
+      </property>
+     </widget>
+    </item>
+    <item row="7" column="3">
+     <widget class="QLabel" name="label_Btree_Reconstruct4_2">
+      <property name="text">
+       <string>Btree4 rec</string>
+      </property>
+     </widget>
+    </item>
+    <item row="8" column="1">
+     <widget class="QLabel" name="label_Btree_Reconstruct2_1">
+      <property name="text">
+       <string>Btree2 rec</string>
+      </property>
+     </widget>
+    </item>
+    <item row="8" column="2">
+     <widget class="QLabel" name="label_Btrees2_1">
+      <property name="text">
+       <string>Btree2</string>
+      </property>
+     </widget>
+    </item>
+    <item row="8" column="3">
+     <widget class="QLabel" name="label_Btree_Reconstruct2_2">
+      <property name="text">
+       <string>Btree2 rec</string>
+      </property>
+     </widget>
+    </item>
+    <item row="8" column="4">
+     <widget class="QLabel" name="label_Btrees2_2">
+      <property name="text">
+       <string>Btree2</string>
+      </property>
+     </widget>
+    </item>
+    <item row="9" column="1">
+     <widget class="QLabel" name="label_Btree_Reconstruct1_1">
+      <property name="text">
+       <string>Btree1 rec</string>
+      </property>
+     </widget>
+    </item>
+    <item row="9" column="2">
+     <widget class="QLabel" name="label_Btrees1_1">
+      <property name="text">
+       <string>Btree1</string>
+      </property>
+     </widget>
+    </item>
+    <item row="9" column="3">
+     <widget class="QLabel" name="label_Btree_Reconstruct1_2">
+      <property name="text">
+       <string>Btree1 rec</string>
+      </property>
+     </widget>
+    </item>
+    <item row="9" column="4">
+     <widget class="QLabel" name="label_Btrees1_2">
+      <property name="text">
+       <string>Btree1</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="3">
+     <widget class="QLabel" name="label">
+      <property name="text">
+       <string>Output filter</string>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="3">
+     <widget class="QLabel" name="label_2">
+      <property name="text">
+       <string>Filter level (0-255)</string>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="4">
+     <widget class="QSpinBox" name="spinBox_Level">
+      <property name="maximum">
+       <number>255</number>
+      </property>
+      <property name="value">
+       <number>80</number>
+      </property>
+     </widget>
+    </item>
+    <item row="11" column="1">
+     <widget class="QRadioButton" name="radioButton">
+      <property name="text">
+       <string>Save dithered</string>
+      </property>
+     </widget>
+    </item>
+    <item row="11" column="3">
+     <widget class="QRadioButton" name="radioButton_2">
+      <property name="text">
+       <string>Save filtered</string>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <layoutdefault spacing="6" margin="11"/>
+ <resources/>
+ <connections/>
+</ui>
