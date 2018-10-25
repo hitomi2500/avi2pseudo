@@ -34,7 +34,7 @@ void MainWindow::on_pushButton_Select_Output_clicked()
 void MainWindow::do_next_frame()
 {
     int i,j;
-    int iResolutionX,iResolutionY;
+    int iResolutionX,iResolutionY,iArraySizeX,iArraySizeY;
     uchar c,c2;
     QByteArray pseudo_data;
     QByteArray pseudo_data_btree1_1;
@@ -44,49 +44,35 @@ void MainWindow::do_next_frame()
         //apogee
         iResolutionX=192;
         iResolutionY=102;
-        Prev_Values.resize(64);
-        for (int i=0;i<Prev_Values.size();i++)
-            Prev_Values[i].resize(51);
-        Curr_Values.resize(64);
-        for (int i=0;i<Curr_Values.size();i++)
-            Curr_Values[i].resize(51);
-        Prev_Values2.resize(64);
-        for (int i=0;i<Prev_Values2.size();i++)
-            Prev_Values2[i].resize(51);
-        Curr_Values2.resize(64);
-        for (int i=0;i<Curr_Values2.size();i++)
-            Curr_Values2[i].resize(51);
-        Reconstruct_Btree1_1.resize(64);
-        for (int i=0;i<Reconstruct_Btree1_1.size();i++)
-            Reconstruct_Btree1_1[i].resize(51);
-        Reconstruct_Btree1_2.resize(64);
-        for (int i=0;i<Reconstruct_Btree1_2.size();i++)
-            Reconstruct_Btree1_2[i].resize(51);
+        iArraySizeX = 64;
+        iArraySizeY = 51;
     }
     else
     {
         //radio
         iResolutionX=128;
         iResolutionY=60;
-        Prev_Values.resize(64);
-        for (int i=0;i<Prev_Values.size();i++)
-            Prev_Values[i].resize(60);
-        Curr_Values.resize(64);
-        for (int i=0;i<Curr_Values.size();i++)
-            Curr_Values[i].resize(60);
-        Prev_Values2.resize(64);
-        for (int i=0;i<Prev_Values2.size();i++)
-            Prev_Values2[i].resize(60);
-        Curr_Values2.resize(64);
-        for (int i=0;i<Curr_Values2.size();i++)
-            Curr_Values2[i].resize(60);
-        Reconstruct_Btree1_1.resize(64);
-        for (int i=0;i<Reconstruct_Btree1_1.size();i++)
-            Reconstruct_Btree1_1[i].resize(60);
-        Reconstruct_Btree1_2.resize(64);
-        for (int i=0;i<Reconstruct_Btree1_2.size();i++)
-            Reconstruct_Btree1_2[i].resize(60);
+        iArraySizeX = 64;
+        iArraySizeY = 60;
     }
+    Prev_Values.resize(iArraySizeX);
+    for (int i=0;i<Prev_Values.size();i++)
+        Prev_Values[i].resize(iArraySizeY);
+    Curr_Values.resize(iArraySizeX);
+    for (int i=0;i<Curr_Values.size();i++)
+        Curr_Values[i].resize(iArraySizeY);
+    Prev_Values2.resize(iArraySizeX);
+    for (int i=0;i<Prev_Values2.size();i++)
+        Prev_Values2[i].resize(iArraySizeY);
+    Curr_Values2.resize(iArraySizeX);
+    for (int i=0;i<Curr_Values2.size();i++)
+        Curr_Values2[i].resize(iArraySizeY);
+    Reconstruct_Btree1_1.resize(iArraySizeX);
+    for (int i=0;i<Reconstruct_Btree1_1.size();i++)
+        Reconstruct_Btree1_1[i].resize(iArraySizeY);
+    Reconstruct_Btree1_2.resize(iArraySizeX);
+    for (int i=0;i<Reconstruct_Btree1_2.size();i++)
+        Reconstruct_Btree1_2[i].resize(iArraySizeY);
     decoder->getFrame(my_img_raw);
     QRect CropRect;
     CropRect.setSize(QSize(iResolutionX,iResolutionY));
@@ -216,12 +202,12 @@ void MainWindow::do_next_frame()
                 c=0;c2=0;
                 if (qGray(my_img_uniform.pixel(i,j)) > iTreshold) c |= 0x01;
                 if (qGray(my_img_uniform.pixel(i+1,j)) > iTreshold) c |= 0x02;
-                if (qGray(my_img_uniform.pixel(i,j+1)) > iTreshold) c |= 0x08;
-                if (qGray(my_img_uniform.pixel(i+1,j+1)) > iTreshold) c |= 0x10;
+                if (qGray(my_img_uniform.pixel(i,j+1)) > iTreshold) c |= 0x10;
+                if (qGray(my_img_uniform.pixel(i+1,j+1)) > iTreshold) c |= 0x04;
                 if (qGray(my_img_uniform2.pixel(i,j)) > iTreshold) c2 |= 0x01;
                 if (qGray(my_img_uniform2.pixel(i+1,j)) > iTreshold) c2 |= 0x02;
-                if (qGray(my_img_uniform2.pixel(i,j+1)) > iTreshold) c2 |= 0x08;
-                if (qGray(my_img_uniform2.pixel(i+1,j+1)) > iTreshold) c2 |= 0x10;
+                if (qGray(my_img_uniform2.pixel(i,j+1)) > iTreshold) c2 |= 0x10;
+                if (qGray(my_img_uniform2.pixel(i+1,j+1)) > iTreshold) c2 |= 0x04;
                 pseudo_data.append(c);
                 if (Prev_Values[i/2][j/2] != c)
                 {
@@ -229,9 +215,9 @@ void MainWindow::do_next_frame()
                     else my_img_deltaview.setPixelColor(i,j,Qt::darkGreen);
                     if (Prev_Values[i/2][j/2] & 0x02 ) my_img_deltaview.setPixelColor(i+1,j,Qt::green);
                     else my_img_deltaview.setPixelColor(i+1,j,Qt::darkGreen);
-                    if (Prev_Values[i/2][j/2] & 0x04 ) my_img_deltaview.setPixelColor(i,j+1,Qt::green);
+                    if (Prev_Values[i/2][j/2] & 0x10 ) my_img_deltaview.setPixelColor(i,j+1,Qt::green);
                     else my_img_deltaview.setPixelColor(i,j+1,Qt::darkGreen);
-                    if (Prev_Values[i/2][j/2] & 0x10 ) my_img_deltaview.setPixelColor(i+1,j+1,Qt::green);
+                    if (Prev_Values[i/2][j/2] & 0x04 ) my_img_deltaview.setPixelColor(i+1,j+1,Qt::green);
                     else my_img_deltaview.setPixelColor(i+1,j+1,Qt::darkGreen);
                     Delta++;
                 }
@@ -241,9 +227,9 @@ void MainWindow::do_next_frame()
                     else my_img_deltaview.setPixelColor(i,j,Qt::darkGreen);
                     if (Prev_Values2[i/2][j/2] & 0x02 ) my_img_deltaview2.setPixelColor(i+1,j,Qt::green);
                     else my_img_deltaview.setPixelColor(i+1,j,Qt::darkGreen);
-                    if (Prev_Values2[i/2][j/2] & 0x04 ) my_img_deltaview2.setPixelColor(i,j+1,Qt::green);
+                    if (Prev_Values2[i/2][j/2] & 0x10 ) my_img_deltaview2.setPixelColor(i,j+1,Qt::green);
                     else my_img_deltaview.setPixelColor(i,j+1,Qt::darkGreen);
-                    if (Prev_Values2[i/2][j/2] & 0x10 ) my_img_deltaview2.setPixelColor(i+1,j+1,Qt::green);
+                    if (Prev_Values2[i/2][j/2] & 0x04 ) my_img_deltaview2.setPixelColor(i+1,j+1,Qt::green);
                     else my_img_deltaview.setPixelColor(i+1,j+1,Qt::darkGreen);
                     Delta2++;
                 }

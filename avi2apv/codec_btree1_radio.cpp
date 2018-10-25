@@ -159,9 +159,9 @@ void Codec_Btree1_Radio::Unpack(QByteArray * packed, QVector<QVector<unsigned ch
                                         else unpack_image->setPixelColor(xi*2,xj*2,Qt::darkRed);
                                         if (Unpack_Values[0][xi][xj] & 0x02 ) unpack_image->setPixelColor(xi*2+1,xj*2,Qt::red);
                                         else unpack_image->setPixelColor(xi*2+2,xj*2,Qt::darkRed);
-                                        if (Unpack_Values[0][xi][xj] & 0x04 ) unpack_image->setPixelColor(xi*2,xj*2+1,Qt::red);
+                                        if (Unpack_Values[0][xi][xj] & 0x10 ) unpack_image->setPixelColor(xi*2,xj*2+1,Qt::red);
                                         else unpack_image->setPixelColor(xi*2,xj*2+1,Qt::darkRed);
-                                        if (Unpack_Values[0][xi][xj] & 0x10 ) unpack_image->setPixelColor(xi*2+1,xj*2+1,Qt::red);
+                                        if (Unpack_Values[0][xi][xj] & 0x04 ) unpack_image->setPixelColor(xi*2+1,xj*2+1,Qt::red);
                                         else unpack_image->setPixelColor(xi*2+1,xj*2+1,Qt::darkRed);
                                     }
                                 }
