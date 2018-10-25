@@ -7,7 +7,8 @@ void unpack_btree1()
 	INX H
 	INX H
 	INX H
-	LXI D, 0C113h ;ScreenStart
+	;LXI D, 0C113h ;ScreenStart
+	LXI D, 0E1DAh ;ScreenStart
 	MOV A,M ;load 1st byte into A
 	INX H ;move to next byte
 	MOV B,A ;save A

@@ -1,7 +1,7 @@
 #include <mem.h>
 #include <apogey/screen_constrcutor.h>
 #include <fs/fs.h>
-#include <apogey/bios.h>
+//#include <apogey/bios.h>
 #include "unpack_btree1.h"
 
 void main() {
@@ -26,8 +26,6 @@ void main() {
   VG75[0] = 0xFF;
   VG75[0] = 0xFF;
 
-  apogeyScreen3A();
-
   fs_open("VIDEO/APPLE.APV");
   
   //read header
@@ -38,8 +36,24 @@ void main() {
 	CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
 	LHLD 04004h 
 	SHLD main_iNumberOfFrames
+	LHLD 04000h
+	MOV A,H
+	CPI 0h
+	JNZ SetScreen128x60
+SetScreen192x102:
+  }
+	apogeyScreen3A();
+  asm {
+	JMP SetScreenDone
+SetScreen128x60:
+  }
+	apogeyScreen2A();
+  asm
+  {
+SetScreenDone:
+	
   }	  
-  
+
   //FIFO from 4000 to BFFF - 32 KB total, 8 full frames / 80 packed frames
 asm{
 	  LXI H, 04000h

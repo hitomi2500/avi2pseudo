@@ -138,12 +138,12 @@ void MainWindow::do_next_frame()
                  //radio
                  if (Prev_Values[i][j] & 0x01 ) my_img_deltaview.setPixelColor(i*2,j*2,Qt::white);
                  if (Prev_Values[i][j] & 0x02 ) my_img_deltaview.setPixelColor(i*2+1,j*2,Qt::white);
-                 if (Prev_Values[i][j] & 0x04 ) my_img_deltaview.setPixelColor(i*2,j*2+1,Qt::white);
-                 if (Prev_Values[i][j] & 0x10 ) my_img_deltaview.setPixelColor(i*2+1,j*2+1,Qt::white);
+                 if (Prev_Values[i][j] & 0x10 ) my_img_deltaview.setPixelColor(i*2,j*2+1,Qt::white);
+                 if (Prev_Values[i][j] & 0x04 ) my_img_deltaview.setPixelColor(i*2+1,j*2+1,Qt::white);
                  if (Prev_Values2[i][j] & 0x01 ) my_img_deltaview2.setPixelColor(i*2,j*2,Qt::white);
                  if (Prev_Values2[i][j] & 0x02 ) my_img_deltaview2.setPixelColor(i*2+1,j*2,Qt::white);
-                 if (Prev_Values2[i][j] & 0x04 ) my_img_deltaview2.setPixelColor(i*2,j*2+1,Qt::white);
-                 if (Prev_Values2[i][j] & 0x10 ) my_img_deltaview2.setPixelColor(i*2+1,j*2+1,Qt::white);
+                 if (Prev_Values2[i][j] & 0x10 ) my_img_deltaview2.setPixelColor(i*2,j*2+1,Qt::white);
+                 if (Prev_Values2[i][j] & 0x04 ) my_img_deltaview2.setPixelColor(i*2+1,j*2+1,Qt::white);
              }
          }
     if (ui->comboBox->currentIndex()==0)

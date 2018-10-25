@@ -15,25 +15,40 @@ main:
   mvi m, 255
   ; 1 ((uchar*)0xEF00)
   mvi m, 255
-  ; 29 apogeyScreen3A();
-  call apogeyScreen3a
-  ; 31 fs_open("VIDEO/APPLE.APV");
+  ; 29 fs_open("VIDEO/APPLE.APV");
   lxi h, string0
   call fs_open
-  ; 34 asm{
+  ; 32 asm{
 	LXI D, 04000h
 	LXI H, 00100h ; header 256 bytes
     MVI  A, 004h;read command
 	CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
 	LHLD 04004h 
 	SHLD main_iNumberOfFrames
+	LHLD 04000h
+	MOV A,H
+	CPI 0h
+	JNZ SetScreen128x60
+SetScreen192x102:
   
-  ; 44 asm{
+  ; 45 apogeyScreen3A();
+  call apogeyScreen3a
+  ; 46 asm {
+	JMP SetScreenDone
+SetScreen128x60:
+  
+  ; 50 apogeyScreen2A();
+  call apogeyScreen2a
+  ; 51 asm
+SetScreenDone:
+	
+  
+  ; 58 asm{
 	  LXI H, 04000h
 	  SHLD main_FifoReadPointer
 	  SHLD main_FifoWritePointer
   
-  ; 51 asm{
+  ; 65 asm{
 	LHLD main_FifoWritePointer
 	XCHG
 	LXI H, 03000h ; размер передачи 12k
@@ -43,10 +58,10 @@ main:
 	SHLD main_FifoWritePointer
 	;DI ;for debug
   
-  ; 62 iFrameCounter = iNumberOfFrames;
+  ; 76 iFrameCounter = iNumberOfFrames;
   lhld main_iNumberOfFrames
   shld main_iFrameCounter
-  ; 64 asm{
+  ; 78 asm{
 Main_Loop_Start:
 	LHLD main_iFrameCounter
 	XRA A ; A=0
@@ -198,9 +213,9 @@ Fifo_Read_Do2:
 
 Do_Exit:
   
-  ; 217 apogeyScreen0();
+  ; 231 apogeyScreen0();
   call apogeyScreen0
-  ; 218 asm {
+  ; 232 asm {
 		JMP 0F875h ;jump to monitor
 	
   ret
@@ -210,7 +225,8 @@ unpack_btree1:
 	INX H
 	INX H
 	INX H
-	LXI D, 0C113h ;ScreenStart
+	;LXI D, 0C113h ;ScreenStart
+	LXI D, 0E1DAh ;ScreenStart
 	MOV A,M ;load 1st byte into A
 	INX H ;move to next byte
 	MOV B,A ;save A
@@ -608,6 +624,14 @@ fs_entry_n:
     JMP 0000h
   
   ret
+  ; --- fs_open -----------------------------------------------------------------
+fs_open:
+  shld fs_open_1
+  ; 5 return fs_open0(name, O_OPEN);
+  shld fs_open0_1
+  xra a
+  jmp fs_open0
+  ret
   ; --- apogeyScreen3a -----------------------------------------------------------------
 apogeyScreen3a:
   push b
@@ -716,13 +740,112 @@ l16:
   ; 15 asm { di } 
   pop b
   ret
-  ; --- fs_open -----------------------------------------------------------------
-fs_open:
-  shld fs_open_1
-  ; 5 return fs_open0(name, O_OPEN);
-  shld fs_open0_1
+  ; --- apogeyScreen2a -----------------------------------------------------------------
+apogeyScreen2a:
+  push b
+  ; 3 memset((uchar*)MEM_ADDR, 0, (HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+2); 
+  lxi h, 57808
+  shld memset_1
   xra a
-  jmp fs_open0
+  sta memset_2
+  lxi h, 2333
+  call memset
+  ; 4 for(v=(uchar*)(MEM_ADDR)-1, i=TOP_INVISIBLE; i; --i) 
+  lxi b, 57807
+  mvi a, 3
+  sta apogeyScreen2a_i
+l19:
+  ; convertToConfition
+  lda apogeyScreen2a_i
+  ora a
+  jz l20
+  ; 5 v+=2, *v = 0xF1; Сложение BC с константой 2
+  inx b
+  inx b
+  mvi a, 241
+  stax b
+l21:
+  lxi h, apogeyScreen2a_i
+  dcr m
+  jmp l19
+l20:
+  ; 6 if(FILL_EOL) 7 for(i = HEIGHT; i; --i) 
+  mvi a, 31
+  sta apogeyScreen2a_i
+l23:
+  ; convertToConfition
+  lda apogeyScreen2a_i
+  ora a
+  jz l24
+  ; 8 v += (BPL), *v = 0xF1; Сложение с BC
+  lxi h, 75
+  dad b
+  mov b, h
+  mov c, l
+  mvi a, 241
+  stax b
+l25:
+  lxi h, apogeyScreen2a_i
+  dcr m
+  jmp l23
+l24:
+  ; 9 ((uchar*)MEM_ADDR)[(HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+1] = 0xFF; 
+  lxi h, 60140
+  mvi m, 255
+  ; 10 apogeyVideoMem = (uchar*)(MEM_ADDR) + (TOP_INVISIBLE)*2 + 9; 
+  lxi h, 57823
+  shld apogeyVideoMem
+  ; 11 apogeyVideoBpl = (BPL); 
+  mvi a, 75
+  sta apogeyVideoBpl
+  ; 1 ((uchar*)0xEF00)
+  lxi h, 61185
+  mvi m, 0
+  ; 1 ((uchar*)0xEF00)
+  dcr l
+  mvi m, 77
+  ; 1 ((uchar*)0xEF00)
+  mvi m, 100
+  ; 1 ((uchar*)0xEF00)
+  mvi m, 119
+  ; 1 ((uchar*)0xEF00)
+  mvi m, 83
+  ; 1 ((uchar*)0xEF00)
+  inr l
+  mvi m, 35
+  ; 7 while((VG75[1] & 0x20) == 0); 
+l32:
+  lda 61185
+  ani 32
+  jnz l33
+  jmp l32
+l33:
+  ; 8 while((VG75[1] & 0x20) == 0); 
+l34:
+  lda 61185
+  ani 32
+  jnz l35
+  jmp l34
+l35:
+  ; 1 ((uchar*)0xF000)
+  lxi h, 61448
+  mvi m, 128
+  ; 1 ((uchar*)0xF000)
+  mvi l, 4
+  mvi m, 208
+  ; 1 ((uchar*)0xF000)
+  mvi m, 225
+  ; 1 ((uchar*)0xF000)
+  inr l
+  mvi m, 28
+  ; 1 ((uchar*)0xF000)
+  mvi m, 73
+  ; 1 ((uchar*)0xF000)
+  mvi l, 8
+  mvi m, 164
+  ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 15 asm { di } 
+ di 
+  pop b
   ret
   ; --- apogeyScreen0 -----------------------------------------------------------------
 apogeyScreen0:
@@ -756,19 +879,19 @@ apogeyScreen0:
   inr l
   mvi m, 35
   ; 7 while((VG75[1] & 0x20) == 0); 
-l31:
+l50:
   lda 61185
   ani 32
-  jnz l32
-  jmp l31
-l32:
+  jnz l51
+  jmp l50
+l51:
   ; 8 while((VG75[1] & 0x20) == 0); 
-l33:
+l52:
   lda 61185
   ani 32
-  jnz l34
-  jmp l33
-l34:
+  jnz l53
+  jmp l52
+l53:
   ; 1 ((uchar*)0xF000)
   lxi h, 61448
   mvi m, 128
@@ -789,6 +912,20 @@ l34:
  di 
   pop b
   ret
+  ; --- fs_open0 -----------------------------------------------------------------
+fs_open0:
+  sta fs_open0_2
+  ; 5 asm {      
+      
+    PUSH B
+    ; a = fs_open0_2
+    MOV  D, A 
+    LHLD fs_open0_1
+    MVI  A, 2
+    CALL fs_entry
+    POP  B
+  
+  ret
   ; --- memset -----------------------------------------------------------------
 memset:
   shld memset_3
@@ -807,20 +944,6 @@ memset_l1:
     jmp memset_l1
 memset_l2:
     pop b
-  
-  ret
-  ; --- fs_open0 -----------------------------------------------------------------
-fs_open0:
-  sta fs_open0_2
-  ; 5 asm {      
-      
-    PUSH B
-    ; a = fs_open0_2
-    MOV  D, A 
-    LHLD fs_open0_1
-    MVI  A, 2
-    CALL fs_entry
-    POP  B
   
   ret
 main_i:
@@ -849,11 +972,17 @@ fs_high:
  .ds 2
 fs_addr:
  .ds 1
-apogeyScreen3a_i:
- .ds 1
 fs_open_1:
  .ds 2
+apogeyScreen3a_i:
+ .ds 1
+apogeyScreen2a_i:
+ .ds 1
 apogeyScreen0_i:
+ .ds 1
+fs_open0_1:
+ .ds 2
+fs_open0_2:
  .ds 1
 memset_1:
  .ds 2
@@ -867,10 +996,6 @@ apogeyVideoMem:
 apogeyVideoBpl:
  .db 78
 
-fs_open0_1:
- .ds 2
-fs_open0_2:
- .ds 1
 string0:
  .db 86,73,68,69,79,47,65,80,80,76,69,46,65,80,86,0
   .end
