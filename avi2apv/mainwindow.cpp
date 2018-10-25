@@ -138,11 +138,11 @@ void MainWindow::do_next_frame()
                  //radio
                  if (Prev_Values[i][j] & 0x01 ) my_img_deltaview.setPixelColor(i*2,j*2,Qt::white);
                  if (Prev_Values[i][j] & 0x02 ) my_img_deltaview.setPixelColor(i*2+1,j*2,Qt::white);
-                 if (Prev_Values[i][j] & 0x08 ) my_img_deltaview.setPixelColor(i*2,j*2+1,Qt::white);
+                 if (Prev_Values[i][j] & 0x04 ) my_img_deltaview.setPixelColor(i*2,j*2+1,Qt::white);
                  if (Prev_Values[i][j] & 0x10 ) my_img_deltaview.setPixelColor(i*2+1,j*2+1,Qt::white);
                  if (Prev_Values2[i][j] & 0x01 ) my_img_deltaview2.setPixelColor(i*2,j*2,Qt::white);
                  if (Prev_Values2[i][j] & 0x02 ) my_img_deltaview2.setPixelColor(i*2+1,j*2,Qt::white);
-                 if (Prev_Values2[i][j] & 0x08 ) my_img_deltaview2.setPixelColor(i*2,j*2+1,Qt::white);
+                 if (Prev_Values2[i][j] & 0x04 ) my_img_deltaview2.setPixelColor(i*2,j*2+1,Qt::white);
                  if (Prev_Values2[i][j] & 0x10 ) my_img_deltaview2.setPixelColor(i*2+1,j*2+1,Qt::white);
              }
          }
@@ -229,7 +229,7 @@ void MainWindow::do_next_frame()
                     else my_img_deltaview.setPixelColor(i,j,Qt::darkGreen);
                     if (Prev_Values[i/2][j/2] & 0x02 ) my_img_deltaview.setPixelColor(i+1,j,Qt::green);
                     else my_img_deltaview.setPixelColor(i+1,j,Qt::darkGreen);
-                    if (Prev_Values[i/2][j/2] & 0x08 ) my_img_deltaview.setPixelColor(i,j+1,Qt::green);
+                    if (Prev_Values[i/2][j/2] & 0x04 ) my_img_deltaview.setPixelColor(i,j+1,Qt::green);
                     else my_img_deltaview.setPixelColor(i,j+1,Qt::darkGreen);
                     if (Prev_Values[i/2][j/2] & 0x10 ) my_img_deltaview.setPixelColor(i+1,j+1,Qt::green);
                     else my_img_deltaview.setPixelColor(i+1,j+1,Qt::darkGreen);
@@ -241,7 +241,7 @@ void MainWindow::do_next_frame()
                     else my_img_deltaview.setPixelColor(i,j,Qt::darkGreen);
                     if (Prev_Values2[i/2][j/2] & 0x02 ) my_img_deltaview2.setPixelColor(i+1,j,Qt::green);
                     else my_img_deltaview.setPixelColor(i+1,j,Qt::darkGreen);
-                    if (Prev_Values2[i/2][j/2] & 0x08 ) my_img_deltaview2.setPixelColor(i,j+1,Qt::green);
+                    if (Prev_Values2[i/2][j/2] & 0x04 ) my_img_deltaview2.setPixelColor(i,j+1,Qt::green);
                     else my_img_deltaview.setPixelColor(i,j+1,Qt::darkGreen);
                     if (Prev_Values2[i/2][j/2] & 0x10 ) my_img_deltaview2.setPixelColor(i+1,j+1,Qt::green);
                     else my_img_deltaview.setPixelColor(i+1,j+1,Qt::darkGreen);
