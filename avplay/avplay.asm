@@ -1,11 +1,57 @@
   .include "stdlib8080.inc"
 main:
+	  LXI  H, 0FF57h
+	  MOV A,M
+	  CPI 090h
+	  JNZ Machine_Test_Not_Apogey
+	  INX  H
+	  MOV A,M
+	  CPI 061h
+	  JNZ Machine_Test_Not_Apogey
+	  INX  H
+	  MOV A,M
+	  CPI 070h
+	  JNZ Machine_Test_Not_Apogey
+	  INX  H
+	  MOV A,M
+	  CPI 06Fh
+	  JNZ Machine_Test_Not_Apogey
+	  MVI A,00
+	  STA main_Machine_Type
+	  JMP Machine_Test_Done
+Machine_Test_Not_Apogey:
+	  LXI  H, 0FF5Bh
+	  MOV A,M
+	  CPI 072h
+	  JNZ Machine_Test_Not_Radio
+	  INX  H
+	  MOV A,M
+	  CPI 061h
+	  JNZ Machine_Test_Not_Radio
+	  INX  H
+	  MOV A,M
+	  CPI 064h
+	  JNZ Machine_Test_Not_Radio
+	  INX  H
+	  MOV A,M
+	  CPI 069h
+	  JNZ Machine_Test_Not_Radio
+	  MVI A,01
+	  STA main_Machine_Type
+	  JMP Machine_Test_Done
+Machine_Test_Not_Radio:
+	  LXI H, str_Unknown_Machine
+	  CALL 0F818h ;using standard monitor function on unknown machines
+	  JMP 0F875h ;jump to monitor
+Machine_Test_Done:
+  
+  ; 65 asm {
      MVI  A, 1		; Версия контроллера
      LXI  B, 0DE17h; BiosEntry  ; Точка входа SD BIOS
      LXI  D, 0DBF3h; SELF_NAME  ; Собственное имя
      LXI  H, 0DCF3h; CMD_LINE   ; Командная строка
   
-  ; 22 fs_init();
+  ; 72 fs_init();
   call fs_init
   ; 1 ((uchar*)0xEF00)
   lxi h, 61185
@@ -15,10 +61,10 @@ main:
   mvi m, 255
   ; 1 ((uchar*)0xEF00)
   mvi m, 255
-  ; 29 fs_open("VIDEO/APPLE.APV");
+  ; 79 fs_open("VIDEO/APPLE.APV");
   lxi h, string0
   call fs_open
-  ; 32 asm{
+  ; 82 asm{
 	LXI D, 04000h
 	LXI H, 00100h ; header 256 bytes
     MVI  A, 004h;read command
@@ -27,28 +73,29 @@ main:
 	SHLD main_iNumberOfFrames
 	LHLD 04000h
 	MOV A,H
+	STA main_Screen_Type
 	CPI 0h
 	JNZ SetScreen128x60
 SetScreen192x102:
   
-  ; 45 apogeyScreen3A();
+  ; 96 apogeyScreen3A();
   call apogeyScreen3a
-  ; 46 asm {
+  ; 97 asm {
 	JMP SetScreenDone
 SetScreen128x60:
   
-  ; 50 apogeyScreen2A();
+  ; 101 apogeyScreen2A();
   call apogeyScreen2a
-  ; 51 asm
+  ; 102 asm
 SetScreenDone:
 	
   
-  ; 58 asm{
+  ; 109 asm{
 	  LXI H, 04000h
 	  SHLD main_FifoReadPointer
 	  SHLD main_FifoWritePointer
   
-  ; 65 asm{
+  ; 116 asm{
 	LHLD main_FifoWritePointer
 	XCHG
 	LXI H, 03000h ; размер передачи 12k
@@ -58,10 +105,10 @@ SetScreenDone:
 	SHLD main_FifoWritePointer
 	;DI ;for debug
   
-  ; 76 iFrameCounter = iNumberOfFrames;
+  ; 127 iFrameCounter = iNumberOfFrames;
   lhld main_iNumberOfFrames
   shld main_iFrameCounter
-  ; 78 asm{
+  ; 129 asm{
 Main_Loop_Start:
 	LHLD main_iFrameCounter
 	XRA A ; A=0
@@ -178,6 +225,15 @@ Fifo_Read_Copy_Loop:
 	CMP C
 	JNZ Fifo_Read_Copy_Loop
 	;copy done, now processing frame as-is
+	;we should init DE before calling unpack, this is screen-dependent
+	LDA main_Screen_Type
+	CPI 01h
+	JZ Fifo_Read_Screen_Type_1
+	LXI D, 0C113h ;ScreenStart	
+	JMP Fifo_Read_Screen_Type_Done
+Fifo_Read_Screen_Type_1:	
+	LXI D, 0E1DAh ;ScreenStart
+Fifo_Read_Screen_Type_Done:
 	LHLD main_FifoReadPointer
 	CALL unpack_btree1
 	;now move read pointer
@@ -197,6 +253,15 @@ Fifo_Read_Copy_Loop:
 	
 Fifo_Read_Do2:	
 	;non-wrapped unpack
+	;we should init DE before calling unpack, this is screen-dependent
+	LDA main_Screen_Type
+	CPI 01h
+	JZ Fifo_Read2_Screen_Type_1
+	LXI D, 0C113h ;ScreenStart	
+	JMP Fifo_Read2_Screen_Type_Done
+Fifo_Read2_Screen_Type_1:	
+	LXI D, 0E1DAh ;ScreenStart
+Fifo_Read2_Screen_Type_Done:
 	LHLD main_FifoReadPointer
 	CALL unpack_btree1
 	;now move read pointer
@@ -213,10 +278,13 @@ Fifo_Read_Do2:
 
 Do_Exit:
   
-  ; 231 apogeyScreen0();
+  ; 300 apogeyScreen0();
   call apogeyScreen0
-  ; 232 asm {
+  ; 301 asm {
 		JMP 0F875h ;jump to monitor
+	
+  ; 305 asm{
+str_Unknown_Machine:	.db "UNKNOWN MACHINE",0
 	
   ret
   ; --- unpack_btree1 -----------------------------------------------------------------
@@ -226,7 +294,7 @@ unpack_btree1:
 	INX H
 	INX H
 	;LXI D, 0C113h ;ScreenStart
-	LXI D, 0E1DAh ;ScreenStart
+	;LXI D, 0E1DAh ;ScreenStart
 	MOV A,M ;load 1st byte into A
 	INX H ;move to next byte
 	MOV B,A ;save A
@@ -960,6 +1028,10 @@ main_iNumberOfFrames:
  .ds 2
 main_iFrameCounter:
  .ds 2
+main_Machine_Type:
+ .ds 1
+main_Screen_Type:
+ .ds 1
 fs_cmdLine:
  .dw $+2
  .ds 1

@@ -11,6 +11,56 @@ void main() {
   void * FifoWritePointer;
   int iNumberOfFrames;
   int iFrameCounter;
+  char Machine_Type;
+  char Screen_Type;
+  
+  //checking machine type
+  asm{
+	  LXI  H, 0FF57h
+	  MOV A,M
+	  CPI 090h
+	  JNZ Machine_Test_Not_Apogey
+	  INX  H
+	  MOV A,M
+	  CPI 061h
+	  JNZ Machine_Test_Not_Apogey
+	  INX  H
+	  MOV A,M
+	  CPI 070h
+	  JNZ Machine_Test_Not_Apogey
+	  INX  H
+	  MOV A,M
+	  CPI 06Fh
+	  JNZ Machine_Test_Not_Apogey
+	  MVI A,00
+	  STA main_Machine_Type
+	  JMP Machine_Test_Done
+Machine_Test_Not_Apogey:
+	  LXI  H, 0FF5Bh
+	  MOV A,M
+	  CPI 072h
+	  JNZ Machine_Test_Not_Radio
+	  INX  H
+	  MOV A,M
+	  CPI 061h
+	  JNZ Machine_Test_Not_Radio
+	  INX  H
+	  MOV A,M
+	  CPI 064h
+	  JNZ Machine_Test_Not_Radio
+	  INX  H
+	  MOV A,M
+	  CPI 069h
+	  JNZ Machine_Test_Not_Radio
+	  MVI A,01
+	  STA main_Machine_Type
+	  JMP Machine_Test_Done
+Machine_Test_Not_Radio:
+	  LXI H, str_Unknown_Machine
+	  CALL 0F818h ;using standard monitor function on unknown machines
+	  JMP 0F875h ;jump to monitor
+Machine_Test_Done:
+  }
 
   asm {
      MVI  A, 1		; Версия контроллера
@@ -38,6 +88,7 @@ void main() {
 	SHLD main_iNumberOfFrames
 	LHLD 04000h
 	MOV A,H
+	STA main_Screen_Type
 	CPI 0h
 	JNZ SetScreen128x60
 SetScreen192x102:
@@ -192,6 +243,15 @@ Fifo_Read_Copy_Loop:
 	CMP C
 	JNZ Fifo_Read_Copy_Loop
 	;copy done, now processing frame as-is
+	;we should init DE before calling unpack, this is screen-dependent
+	LDA main_Screen_Type
+	CPI 01h
+	JZ Fifo_Read_Screen_Type_1
+	LXI D, 0C113h ;ScreenStart	
+	JMP Fifo_Read_Screen_Type_Done
+Fifo_Read_Screen_Type_1:	
+	LXI D, 0E1DAh ;ScreenStart
+Fifo_Read_Screen_Type_Done:
 	LHLD main_FifoReadPointer
 	CALL unpack_btree1
 	;now move read pointer
@@ -211,6 +271,15 @@ Fifo_Read_Copy_Loop:
 	
 Fifo_Read_Do2:	
 	;non-wrapped unpack
+	;we should init DE before calling unpack, this is screen-dependent
+	LDA main_Screen_Type
+	CPI 01h
+	JZ Fifo_Read2_Screen_Type_1
+	LXI D, 0C113h ;ScreenStart	
+	JMP Fifo_Read2_Screen_Type_Done
+Fifo_Read2_Screen_Type_1:	
+	LXI D, 0E1DAh ;ScreenStart
+Fifo_Read2_Screen_Type_Done:
 	LHLD main_FifoReadPointer
 	CALL unpack_btree1
 	;now move read pointer
@@ -232,5 +301,8 @@ Do_Exit:
 	asm {
 		JMP 0F875h ;jump to monitor
 	}
-	  
+	
+	asm{
+str_Unknown_Machine:	.db "UNKNOWN MACHINE",0
+	}
 }

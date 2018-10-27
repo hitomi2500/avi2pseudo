@@ -4,1006 +4,1081 @@
 0003+  0000 C3 03 00      jmp main
 0004+  0003             
 0002   0003             main:
-0003   0003 3E 01            MVI  A, 1		; Версия контроллера
-0004   0005 01 17 DE         LXI  B, 0DE17h; BiosEntry  ; Точка входа SD BIOS
-0005   0008 11 F3 DB         LXI  D, 0DBF3h; SELF_NAME  ; Собственное имя
-0006   000B 21 F3 DC         LXI  H, 0DCF3h; CMD_LINE   ; Командная строка
-0007   000E               
-0008   000E               ; 22 fs_init();
-0009   000E CD 7A 03      call fs_init
-0010   0011               ; 1 ((uchar*)0xEF00)
-0011   0011 21 01 EF      lxi h, 61185
-0012   0014 36 80         mvi m, 128
-0013   0016               ; 1 ((uchar*)0xEF00)
-0014   0016 2D            dcr l
-0015   0017 36 FF         mvi m, 255
-0016   0019               ; 1 ((uchar*)0xEF00)
-0017   0019 36 FF         mvi m, 255
-0018   001B               ; 29 fs_open("VIDEO/APPLE.APV");
-0019   001B 21 6D 05      lxi h, string0
-0020   001E CD 8B 03      call fs_open
-0021   0021               ; 32 asm{
-0022   0021 11 00 40    	LXI D, 04000h
-0023   0024 21 00 01    	LXI H, 00100h ; header 256 bytes
-0024   0027 3E 04           MVI  A, 004h;read command
-0025   0029 CD 87 03    	CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
-0026   002C 2A 04 40    	LHLD 04004h 
-0027   002F 22 4E 05    	SHLD main_iNumberOfFrames
-0028   0032 2A 00 40    	LHLD 04000h
-0029   0035 7C          	MOV A,H
-0030   0036 FE 00       	CPI 0h
-0031   0038 C2 41 00    	JNZ SetScreen128x60
-0032   003B             SetScreen192x102:
-0033   003B               
-0034   003B               ; 45 apogeyScreen3A();
-0035   003B CD 96 03      call apogeyScreen3a
-0036   003E               ; 46 asm {
-0037   003E C3 44 00    	JMP SetScreenDone
-0038   0041             SetScreen128x60:
-0039   0041               
-0040   0041               ; 50 apogeyScreen2A();
-0041   0041 CD 2C 04      call apogeyScreen2a
-0042   0044               ; 51 asm
-0043   0044             SetScreenDone:
-0044   0044             	
-0045   0044               
-0046   0044               ; 58 asm{
-0047   0044 21 00 40    	  LXI H, 04000h
-0048   0047 22 4A 05    	  SHLD main_FifoReadPointer
-0049   004A 22 4C 05    	  SHLD main_FifoWritePointer
-0050   004D               
-0051   004D               ; 65 asm{
-0052   004D 2A 4C 05    	LHLD main_FifoWritePointer
-0053   0050 EB          	XCHG
-0054   0051 21 00 30    	LXI H, 03000h ; размер передачи 12k
-0055   0054 3E 04           MVI  A, 004h;read command
-0056   0056 CD 87 03    	CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
-0057   0059 21 00 70    	LXI H, 07000h
-0058   005C 22 4C 05    	SHLD main_FifoWritePointer
-0059   005F             	;DI ;for debug
-0060   005F               
-0061   005F               ; 76 iFrameCounter = iNumberOfFrames;
-0062   005F 2A 4E 05      lhld main_iNumberOfFrames
-0063   0062 22 50 05      shld main_iFrameCounter
-0064   0065               ; 78 asm{
-0065   0065             Main_Loop_Start:
-0066   0065 2A 50 05    	LHLD main_iFrameCounter
-0067   0068 AF          	XRA A ; A=0
-0068   0069 BC          	CMP H
-0069   006A C2 74 00    	JNZ Fifo_Write_Start
-0070   006D BD          	CMP L
-0071   006E C2 74 00    	JNZ Fifo_Write_Start
-0072   0071 C3 41 01    	JMP Do_Exit
-0073   0074             Fifo_Write_Start:
-0074   0074             	; first check if we have enough free space in fifo, granularity is 1024 bytes
-0075   0074             	; fifo is almost full when either (write!=7C00 and read-write>0 and read-write-8 < 0), or ( write=7C00 and (read> 7C00 or read < 4400) )
-0076   0074 2A 4C 05    	LHLD main_FifoWritePointer
-0077   0077 7C          	MOV A,H
-0078   0078 FE 7C       	CPI 07Ch
-0079   007A CA 91 00    	JZ Fifo_Write_Start2
-0080   007D             	;not end-buffer case, check read-write>0
-0081   007D 2A 4A 05    	LHLD main_FifoReadPointer
-0082   0080 7C          	MOV A,H
-0083   0081 2A 4C 05    	LHLD main_FifoWritePointer
-0084   0084 BC          	CMP H
-0085   0085 FA A2 00    	JM Fifo_Write_Do ;read-write < 0, not skipping
-0086   0088             	;check read-write-8 < 0
-0087   0088 94          	SUB H
-0088   0089 D6 08       	SUI 08h
-0089   008B F2 A2 00    	JP Fifo_Write_Do ;read-write-8 > 0, not skipping
-0090   008E C3 C0 00    	JMP Fifo_Read_Start ;skipping after all
-0091   0091             Fifo_Write_Start2:
-0092   0091             	;end-buffer case, checking if read > 7C00 (not wrapped) 
-0093   0091 2A 4A 05    	LHLD main_FifoReadPointer
-0094   0094 7C          	MOV A,H
-0095   0095 FE 7C       	CPI 07Ch
-0096   0097 F2 C0 00    	JP Fifo_Read_Start ;read is > 7C00, skipping write
-0097   009A             	;now check if read < 4400 (wrapped) 
-0098   009A FE 45       	CPI 045h
-0099   009C FA C0 00    	JM Fifo_Read_Start ;read is < 4400, skipping write
-0100   009F C3 A2 00    	JMP Fifo_Write_Do ;writing after all
-0101   00A2             Fifo_Write_Do:
-0102   00A2 2A 4C 05    	LHLD main_FifoWritePointer
-0103   00A5 EB          	XCHG
-0104   00A6 21 00 04    	LXI H, 00400h ; размер передачи 1024 байт
-0105   00A9 3E 04           MVI  A, 004h;read command
-0106   00AB CD 87 03    	CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
-0107   00AE 2A 4C 05    	LHLD main_FifoWritePointer
-0108   00B1 3E 04       	MVI A, 004h
-0109   00B3 84          	ADD H
-0110   00B4 67          	MOV H, A
-0111   00B5 3E 80       	MVI A,080h
-0112   00B7 BC          	CMP H
-0113   00B8 C2 BD 00    	JNZ Fifo_Write_Do2 ;if fifo write pointer is not at 0x8000, move on
-0114   00BB 26 40       	MVI H,040h ; else wrap back to 0x4000 and move on
-0115   00BD             Fifo_Write_Do2:	
-0116   00BD 22 4C 05    	SHLD main_FifoWritePointer
-0117   00C0             
-0118   00C0             	
-0119   00C0             Fifo_Read_Start:
-0120   00C0             	;first thing to do is to check that we have at least full frame worth of fifo data
-0121   00C0             	;if we dont, wait for fifo to fill up
-0122   00C0             	;there are 2 cases of empty fifo: (write > read) and (write - read < 16) (normal case),
-0123   00C0             	;								or (write < read) and (read - write > 48) (wrap case)
-0124   00C0 2A 4C 05    	LHLD main_FifoWritePointer
-0125   00C3 7C          	MOV A,H
-0126   00C4 2A 4A 05    	LHLD main_FifoReadPointer
-0127   00C7 94          	SUB H
-0128   00C8 F2 DB 00    	JP Fifo_Read_Normal
-0129   00CB             	;wrap case, calculating (read - write) instead
-0130   00CB 2A 4A 05    	LHLD main_FifoReadPointer
-0131   00CE 7C          	MOV A,H
-0132   00CF 2A 4C 05    	LHLD main_FifoWritePointer
-0133   00D2 94          	SUB H
-0134   00D3             	;ok, weve got (read - write),it should be positive. now check if its bigger than 48
-0135   00D3 D6 30       	SUI 030h
-0136   00D5 F2 65 00    	JP Main_Loop_Start ;it IS bigger, meaning FIFO is almost empty, skipping read
-0137   00D8 C3 E0 00    	JMP Fifo_Read_Do
-0138   00DB             Fifo_Read_Normal:
-0139   00DB             	;normal case, diff (write - read) is already in A, checking if its bigger than 16
-0140   00DB D6 10       	SUI 010h
-0141   00DD FA 65 00    	JM Main_Loop_Start ;it is NOT bigger, meaning FIFO is almost empty, skipping read	
-0142   00E0             Fifo_Read_Do:
-0143   00E0             	;decrease frame counter
-0144   00E0 2A 50 05    	LHLD main_iFrameCounter
-0145   00E3 2B          	DCX H
-0146   00E4 22 50 05    	SHLD main_iFrameCounter
-0147   00E7             	;okay, FIFO is not empty, but current frame might be wrapping around FIFO end
-0148   00E7             	;we check this by adding frame size to read pointer
-0149   00E7 2A 4A 05    	LHLD main_FifoReadPointer
-0150   00EA 23          	INX H
-0151   00EB 23          	INX H
-0152   00EC 5E          	MOV E,M
-0153   00ED 23          	INX H
-0154   00EE 56          	MOV D,M
-0155   00EF 23          	INX H
-0156   00F0 19          	DAD D
-0157   00F1 7C          	MOV A,H
-0158   00F2 D6 80       	SUI 080h
-0159   00F4 FA 2B 01    	JM Fifo_Read_Do2 ;if frame is NOT wrapped, unpack it as is
-0160   00F7             	;frame IS wrapped, copy part that doesnt fit from 4000 to 8000
-0161   00F7             	;HL still stores overwrapped value, so use that
-0162   00F7 E5          	PUSH H
-0163   00F8 C1          	POP B
-0164   00F9 78          	MOV A,B
-0165   00FA E6 0F       	ANI 00Fh
-0166   00FC 47          	MOV B,A ;now we have a size in BC
-0167   00FD 21 00 40    	LXI H, 04000h
-0168   0100 11 00 80    	LXI D, 08000h
-0169   0103             Fifo_Read_Copy_Loop:
-0170   0103 7E          	MOV A,M
-0171   0104 12          	STAX D
-0172   0105 23          	INX H
-0173   0106 13          	INX D
-0174   0107 0B          	DCX B
-0175   0108 AF          	XRA A ; A=0
-0176   0109 B8          	CMP B
-0177   010A C2 03 01    	JNZ Fifo_Read_Copy_Loop
-0178   010D B9          	CMP C
-0179   010E C2 03 01    	JNZ Fifo_Read_Copy_Loop
-0180   0111             	;copy done, now processing frame as-is
-0181   0111 2A 4A 05    	LHLD main_FifoReadPointer
-0182   0114 CD 48 01    	CALL unpack_btree1
-0183   0117             	;now move read pointer
-0184   0117 2A 4A 05    	LHLD main_FifoReadPointer
-0185   011A 23          	INX H
-0186   011B 23          	INX H
-0187   011C 5E          	MOV E,M
-0188   011D 23          	INX H
-0189   011E 56          	MOV D,M
-0190   011F 23          	INX H
-0191   0120 19          	DAD D
-0192   0121 7C          	MOV A,H
-0193   0122 D6 40       	SUI 040h
-0194   0124 67          	MOV H,A
-0195   0125 22 4A 05    	SHLD main_FifoReadPointer
-0196   0128 C3 65 00    	JMP Main_Loop_Start ;go back to mail loop start	
-0197   012B             	
-0198   012B             Fifo_Read_Do2:	
-0199   012B             	;non-wrapped unpack
-0200   012B 2A 4A 05    	LHLD main_FifoReadPointer
-0201   012E CD 48 01    	CALL unpack_btree1
-0202   0131             	;now move read pointer
-0203   0131 2A 4A 05    	LHLD main_FifoReadPointer
-0204   0134 23          	INX H
-0205   0135 23          	INX H
-0206   0136 5E          	MOV E,M
-0207   0137 23          	INX H
-0208   0138 56          	MOV D,M
-0209   0139 23          	INX H
-0210   013A 19          	DAD D
-0211   013B 22 4A 05    	SHLD main_FifoReadPointer
-0212   013E C3 65 00    	JMP Main_Loop_Start ;go back to mail loop start
-0213   0141             
-0214   0141             Do_Exit:
-0215   0141               
-0216   0141               ; 231 apogeyScreen0();
-0217   0141 CD C2 04      call apogeyScreen0
-0218   0144               ; 232 asm {
-0219   0144 C3 75 F8    		JMP 0F875h ;jump to monitor
-0220   0147             	
-0221   0147 C9            ret
-0222   0148               ; --- unpack_btree1 -----------------------------------------------------------------
-0223   0148             unpack_btree1:
-0224   0148 23          	INX H
-0225   0149 23          	INX H
-0226   014A 23          	INX H
-0227   014B 23          	INX H
-0228   014C             	;LXI D, 0C113h ;ScreenStart
-0229   014C 11 DA E1    	LXI D, 0E1DAh ;ScreenStart
-0230   014F 7E          	MOV A,M ;load 1st byte into A
-0231   0150 23          	INX H ;move to next byte
-0232   0151 47          	MOV B,A ;save A
-0233   0152 E6 01       	ANI 001h
-0234   0154 CA 5D 01    	JZ unpack_level1_1
-0235   0157 CD E2 01    	CALL unpack_level2
-0236   015A C3 64 01    	JMP unpack_level1_1_end
-0237   015D             unpack_level1_1:
-0238   015D E5          	PUSH H
-0239   015E 21 58 02    	LXI H,0258h
-0240   0161 19          	DAD D
-0241   0162 EB          	XCHG
-0242   0163 E1          	POP H
-0243   0164             unpack_level1_1_end:
-0244   0164 78          	MOV A,B ;restore A
-0245   0165 E6 02       	ANI 002h
-0246   0167 CA 70 01    	JZ unpack_level1_2
-0247   016A CD E2 01    	CALL unpack_level2
-0248   016D C3 77 01    	JMP unpack_level1_2_end
-0249   0170             unpack_level1_2:
-0250   0170 E5          	PUSH H
-0251   0171 21 58 02    	LXI H,0258h
-0252   0174 19          	DAD D
-0253   0175 EB          	XCHG
-0254   0176 E1          	POP H
-0255   0177             unpack_level1_2_end:
-0256   0177 78          	MOV A,B ;restore A
-0257   0178 E6 04       	ANI 004h
-0258   017A CA 83 01    	JZ unpack_level1_3
-0259   017D CD E2 01    	CALL unpack_level2
-0260   0180 C3 8A 01    	JMP unpack_level1_3_end
-0261   0183             unpack_level1_3:
-0262   0183 E5          	PUSH H
-0263   0184 21 58 02    	LXI H,0258h
-0264   0187 19          	DAD D
-0265   0188 EB          	XCHG
-0266   0189 E1          	POP H
-0267   018A             unpack_level1_3_end:
-0268   018A 78          	MOV A,B ;restore A
-0269   018B E6 08       	ANI 008h
-0270   018D CA 96 01    	JZ unpack_level1_4
-0271   0190 CD E2 01    	CALL unpack_level2
-0272   0193 C3 9D 01    	JMP unpack_level1_4_end
-0273   0196             unpack_level1_4:
-0274   0196 E5          	PUSH H
-0275   0197 21 58 02    	LXI H,0258h
-0276   019A 19          	DAD D
-0277   019B EB          	XCHG
-0278   019C E1          	POP H
-0279   019D             unpack_level1_4_end:
-0280   019D 78          	MOV A,B ;restore A
-0281   019E E6 10       	ANI 010h
-0282   01A0 CA A9 01    	JZ unpack_level1_5
-0283   01A3 CD E2 01    	CALL unpack_level2
-0284   01A6 C3 B0 01    	JMP unpack_level1_5_end
-0285   01A9             unpack_level1_5:
-0286   01A9 E5          	PUSH H
-0287   01AA 21 58 02    	LXI H,0258h
-0288   01AD 19          	DAD D
-0289   01AE EB          	XCHG
-0290   01AF E1          	POP H
-0291   01B0             unpack_level1_5_end:
-0292   01B0 78          	MOV A,B ;restore A
-0293   01B1 E6 20       	ANI 020h
-0294   01B3 CA BC 01    	JZ unpack_level1_6
-0295   01B6 CD E2 01    	CALL unpack_level2
-0296   01B9 C3 C3 01    	JMP unpack_level1_6_end
-0297   01BC             unpack_level1_6:
-0298   01BC E5          	PUSH H
-0299   01BD 21 58 02    	LXI H,0258h
-0300   01C0 19          	DAD D
-0301   01C1 EB          	XCHG
-0302   01C2 E1          	POP H
-0303   01C3             unpack_level1_6_end:
-0304   01C3 78          	MOV A,B ;restore A
-0305   01C4 E6 40       	ANI 040h
-0306   01C6 CA CF 01    	JZ unpack_level1_7
-0307   01C9 CD E2 01    	CALL unpack_level2
-0308   01CC C3 D6 01    	JMP unpack_level1_7_end
-0309   01CF             unpack_level1_7:
-0310   01CF E5          	PUSH H
-0311   01D0 21 58 02    	LXI H,0258h
-0312   01D3 19          	DAD D
-0313   01D4 EB          	XCHG
-0314   01D5 E1          	POP H
-0315   01D6             unpack_level1_7_end:
-0316   01D6 78          	MOV A,B ;restore A
-0317   01D7 E6 80       	ANI 080h
-0318   01D9 CA DF 01    	JZ unpack_level1_8
-0319   01DC CD E2 01    	CALL unpack_level2
-0320   01DF             unpack_level1_8:
-0321   01DF C3 78 03    	JMP unpack_end
-0322   01E2             	
-0323   01E2             unpack_level2:
-0324   01E2 C5          	PUSH B
-0325   01E3 7E          	MOV A,M ;load byte into A
-0326   01E4 23          	INX H ;move to next byte
-0327   01E5 47          	MOV B,A ;save A
-0328   01E6 E6 01       	ANI 001h
-0329   01E8 CA F1 01    	JZ unpack_level2_1
-0330   01EB CD 7F 02    	CALL unpack_level3
-0331   01EE C3 F8 01    	JMP unpack_level2_1_end
-0332   01F1             unpack_level2_1:
-0333   01F1 E5          	PUSH H
-0334   01F2 21 4B 00    	LXI H,04Bh
-0335   01F5 19          	DAD D
-0336   01F6 EB          	XCHG
-0337   01F7 E1          	POP H
-0338   01F8             unpack_level2_1_end:
-0339   01F8 78          	MOV A,B ;restore A
-0340   01F9 E6 02       	ANI 002h
-0341   01FB CA 04 02    	JZ unpack_level2_2
-0342   01FE CD 7F 02    	CALL unpack_level3
-0343   0201 C3 0B 02    	JMP unpack_level2_2_end
-0344   0204             unpack_level2_2:
-0345   0204 E5          	PUSH H
-0346   0205 21 4B 00    	LXI H,04Bh
-0347   0208 19          	DAD D
-0348   0209 EB          	XCHG
-0349   020A E1          	POP H
-0350   020B             unpack_level2_2_end:
-0351   020B 78          	MOV A,B ;restore A
-0352   020C E6 04       	ANI 004h
-0353   020E CA 17 02    	JZ unpack_level2_3
-0354   0211 CD 7F 02    	CALL unpack_level3
-0355   0214 C3 1E 02    	JMP unpack_level2_3_end
-0356   0217             unpack_level2_3:
-0357   0217 E5          	PUSH H
-0358   0218 21 4B 00    	LXI H,04Bh
-0359   021B 19          	DAD D
-0360   021C EB          	XCHG
-0361   021D E1          	POP H
-0362   021E             unpack_level2_3_end:
-0363   021E 78          	MOV A,B ;restore A
-0364   021F E6 08       	ANI 008h
-0365   0221 CA 2A 02    	JZ unpack_level2_4
-0366   0224 CD 7F 02    	CALL unpack_level3
-0367   0227 C3 31 02    	JMP unpack_level2_4_end
-0368   022A             unpack_level2_4:
-0369   022A E5          	PUSH H
-0370   022B 21 4B 00    	LXI H,04Bh
-0371   022E 19          	DAD D
-0372   022F EB          	XCHG
-0373   0230 E1          	POP H
-0374   0231             unpack_level2_4_end:
-0375   0231 78          	MOV A,B ;restore A
-0376   0232 E6 10       	ANI 010h
-0377   0234 CA 3D 02    	JZ unpack_level2_5
-0378   0237 CD 7F 02    	CALL unpack_level3
-0379   023A C3 44 02    	JMP unpack_level2_5_end
-0380   023D             unpack_level2_5:
-0381   023D E5          	PUSH H
-0382   023E 21 4B 00    	LXI H,04Bh
-0383   0241 19          	DAD D
-0384   0242 EB          	XCHG
-0385   0243 E1          	POP H
-0386   0244             unpack_level2_5_end:
-0387   0244 78          	MOV A,B ;restore A
-0388   0245 E6 20       	ANI 020h
-0389   0247 CA 50 02    	JZ unpack_level2_6
-0390   024A CD 7F 02    	CALL unpack_level3
-0391   024D C3 57 02    	JMP unpack_level2_6_end
-0392   0250             unpack_level2_6:
-0393   0250 E5          	PUSH H
-0394   0251 21 4B 00    	LXI H,04Bh
-0395   0254 19          	DAD D
-0396   0255 EB          	XCHG
-0397   0256 E1          	POP H
-0398   0257             unpack_level2_6_end:
-0399   0257 78          	MOV A,B ;restore A
-0400   0258 E6 40       	ANI 040h
-0401   025A CA 63 02    	JZ unpack_level2_7
-0402   025D CD 7F 02    	CALL unpack_level3
-0403   0260 C3 6A 02    	JMP unpack_level2_7_end
-0404   0263             unpack_level2_7:
-0405   0263 E5          	PUSH H
-0406   0264 21 4B 00    	LXI H,04Bh
-0407   0267 19          	DAD D
-0408   0268 EB          	XCHG
-0409   0269 E1          	POP H
-0410   026A             unpack_level2_7_end:
-0411   026A 78          	MOV A,B ;restore A
-0412   026B E6 80       	ANI 080h
-0413   026D CA 76 02    	JZ unpack_level2_8
-0414   0270 CD 7F 02    	CALL unpack_level3
-0415   0273 C3 7D 02    	JMP unpack_level2_8_end
-0416   0276             unpack_level2_8:
-0417   0276 E5          	PUSH H
-0418   0277 21 4B 00    	LXI H,04Bh
-0419   027A 19          	DAD D
-0420   027B EB          	XCHG
-0421   027C E1          	POP H
-0422   027D             unpack_level2_8_end:
-0423   027D C1          	POP B
-0424   027E C9          	RET
-0425   027F             
-0426   027F             unpack_level3:
-0427   027F C5          	PUSH B
-0428   0280 7E          	MOV A,M ;load byte into A
-0429   0281 23          	INX H ;move to next byte
-0430   0282 47          	MOV B,A ;save A
-0431   0283 E6 01       	ANI 001h
-0432   0285 CA 8E 02    	JZ unpack_level3_1
-0433   0288 CD 23 03    	CALL unpack_level4
-0434   028B C3 95 02    	JMP unpack_level3_1_end
-0435   028E             unpack_level3_1:
-0436   028E E5          	PUSH H
-0437   028F 21 08 00    	LXI H,008h
-0438   0292 19          	DAD D
-0439   0293 EB          	XCHG
-0440   0294 E1          	POP H
-0441   0295             unpack_level3_1_end:
-0442   0295 78          	MOV A,B ;restore A
-0443   0296 E6 02       	ANI 002h
-0444   0298 CA A1 02    	JZ unpack_level3_2
-0445   029B CD 23 03    	CALL unpack_level4
-0446   029E C3 A8 02    	JMP unpack_level3_2_end
-0447   02A1             unpack_level3_2:
-0448   02A1 E5          	PUSH H
-0449   02A2 21 08 00    	LXI H,008h
-0450   02A5 19          	DAD D
-0451   02A6 EB          	XCHG
-0452   02A7 E1          	POP H
-0453   02A8             unpack_level3_2_end:
-0454   02A8 78          	MOV A,B ;restore A
-0455   02A9 E6 04       	ANI 004h
-0456   02AB CA B4 02    	JZ unpack_level3_3
-0457   02AE CD 23 03    	CALL unpack_level4
-0458   02B1 C3 BB 02    	JMP unpack_level3_3_end
-0459   02B4             unpack_level3_3:
-0460   02B4 E5          	PUSH H
-0461   02B5 21 08 00    	LXI H,008h
-0462   02B8 19          	DAD D
-0463   02B9 EB          	XCHG
-0464   02BA E1          	POP H
-0465   02BB             unpack_level3_3_end:
-0466   02BB 78          	MOV A,B ;restore A
-0467   02BC E6 08       	ANI 008h
-0468   02BE CA C7 02    	JZ unpack_level3_4
-0469   02C1 CD 23 03    	CALL unpack_level4
-0470   02C4 C3 CE 02    	JMP unpack_level3_4_end
-0471   02C7             unpack_level3_4:
-0472   02C7 E5          	PUSH H
-0473   02C8 21 08 00    	LXI H,008h
-0474   02CB 19          	DAD D
-0475   02CC EB          	XCHG
-0476   02CD E1          	POP H
-0477   02CE             unpack_level3_4_end:
-0478   02CE 78          	MOV A,B ;restore A
-0479   02CF E6 10       	ANI 010h
-0480   02D1 CA DA 02    	JZ unpack_level3_5
-0481   02D4 CD 23 03    	CALL unpack_level4
-0482   02D7 C3 E1 02    	JMP unpack_level3_5_end
-0483   02DA             unpack_level3_5:
-0484   02DA E5          	PUSH H
-0485   02DB 21 08 00    	LXI H,008h
-0486   02DE 19          	DAD D
-0487   02DF EB          	XCHG
-0488   02E0 E1          	POP H
-0489   02E1             unpack_level3_5_end:
-0490   02E1 78          	MOV A,B ;restore A
-0491   02E2 E6 20       	ANI 020h
-0492   02E4 CA ED 02    	JZ unpack_level3_6
-0493   02E7 CD 23 03    	CALL unpack_level4
-0494   02EA C3 F4 02    	JMP unpack_level3_6_end
-0495   02ED             unpack_level3_6:
-0496   02ED E5          	PUSH H
-0497   02EE 21 08 00    	LXI H,008h
-0498   02F1 19          	DAD D
-0499   02F2 EB          	XCHG
-0500   02F3 E1          	POP H
-0501   02F4             unpack_level3_6_end:
-0502   02F4 78          	MOV A,B ;restore A
-0503   02F5 E6 40       	ANI 040h
-0504   02F7 CA 00 03    	JZ unpack_level3_7
-0505   02FA CD 23 03    	CALL unpack_level4
-0506   02FD C3 07 03    	JMP unpack_level3_7_end
-0507   0300             unpack_level3_7:
-0508   0300 E5          	PUSH H
-0509   0301 21 08 00    	LXI H,008h
-0510   0304 19          	DAD D
-0511   0305 EB          	XCHG
-0512   0306 E1          	POP H
-0513   0307             unpack_level3_7_end:
-0514   0307 78          	MOV A,B ;restore A
-0515   0308 E6 80       	ANI 080h
-0516   030A CA 13 03    	JZ unpack_level3_8
-0517   030D CD 23 03    	CALL unpack_level4
-0518   0310 C3 1A 03    	JMP unpack_level3_8_end
-0519   0313             unpack_level3_8:
-0520   0313 E5          	PUSH H
-0521   0314 21 08 00    	LXI H,008h
-0522   0317 19          	DAD D
-0523   0318 EB          	XCHG
-0524   0319 E1          	POP H
-0525   031A             unpack_level3_8_end:
-0526   031A             	;end of line: add 11 bytes
-0527   031A E5          	PUSH H
-0528   031B 21 0B 00    	LXI H,00Bh
-0529   031E 19          	DAD D
-0530   031F EB          	XCHG
-0531   0320 E1          	POP H
-0532   0321             	;going back
-0533   0321 C1          	POP B
-0534   0322 C9          	RET
-0535   0323             
-0536   0323             unpack_level4:
-0537   0323 C5          	PUSH B
-0538   0324 7E          	MOV A,M ;load byte into A
-0539   0325 23          	INX H ;move to next byte
-0540   0326 47          	MOV B,A ;save A
-0541   0327 E6 01       	ANI 001h
-0542   0329 CA 2F 03    	JZ unpack_level4_1
-0543   032C 7E          	MOV A,M ;load byte into A
-0544   032D 23          	INX H ;move to next byte
-0545   032E 12          	STAX D
-0546   032F             unpack_level4_1:
-0547   032F 13          	INX D
-0548   0330 78          	MOV A,B ;restore A
-0549   0331 E6 02       	ANI 002h
-0550   0333 CA 39 03    	JZ unpack_level4_2
-0551   0336 7E          	MOV A,M ;load byte into A
-0552   0337 23          	INX H ;move to next byte
-0553   0338 12          	STAX D
-0554   0339             unpack_level4_2:
-0555   0339 13          	INX D
-0556   033A 78          	MOV A,B ;restore A
-0557   033B E6 04       	ANI 004h
-0558   033D CA 43 03    	JZ unpack_level4_3
-0559   0340 7E          	MOV A,M ;load byte into A
-0560   0341 23          	INX H ;move to next byte
-0561   0342 12          	STAX D
-0562   0343             unpack_level4_3:
-0563   0343 13          	INX D
-0564   0344 78          	MOV A,B ;restore A
-0565   0345 E6 08       	ANI 008h
-0566   0347 CA 4D 03    	JZ unpack_level4_4
-0567   034A 7E          	MOV A,M ;load byte into A
-0568   034B 23          	INX H ;move to next byte
-0569   034C 12          	STAX D
-0570   034D             unpack_level4_4:
-0571   034D 13          	INX D
-0572   034E 78          	MOV A,B ;restore A
-0573   034F E6 10       	ANI 010h
-0574   0351 CA 57 03    	JZ unpack_level4_5
-0575   0354 7E          	MOV A,M ;load byte into A
-0576   0355 23          	INX H ;move to next byte
-0577   0356 12          	STAX D
-0578   0357             unpack_level4_5:
-0579   0357 13          	INX D
-0580   0358 78          	MOV A,B ;restore A
-0581   0359 E6 20       	ANI 020h
-0582   035B CA 61 03    	JZ unpack_level4_6
-0583   035E 7E          	MOV A,M ;load byte into A
-0584   035F 23          	INX H ;move to next byte
-0585   0360 12          	STAX D
-0586   0361             unpack_level4_6:
-0587   0361 13          	INX D
-0588   0362 78          	MOV A,B ;restore A
-0589   0363 E6 40       	ANI 040h
-0590   0365 CA 6B 03    	JZ unpack_level4_7
-0591   0368 7E          	MOV A,M ;load byte into A
-0592   0369 23          	INX H ;move to next byte
-0593   036A 12          	STAX D
-0594   036B             unpack_level4_7:
-0595   036B 13          	INX D
-0596   036C 78          	MOV A,B ;restore A
-0597   036D E6 80       	ANI 080h
-0598   036F CA 75 03    	JZ unpack_level4_8
-0599   0372 7E          	MOV A,M ;load byte into A
-0600   0373 23          	INX H ;move to next byte
-0601   0374 12          	STAX D
-0602   0375             unpack_level4_8:
-0603   0375 13          	INX D
-0604   0376 C1          	POP B
-0605   0377 C9          	RET
-0606   0378             	
-0607   0378             unpack_end:
-0608   0378 00          	NOP
-0609   0379               
-0610   0379 C9            ret
-0611   037A               ; --- fs_init -----------------------------------------------------------------
-0612   037A             fs_init:
-0613   037A 22 52 05        SHLD fs_cmdLine
-0614   037D EB              XCHG
-0615   037E 22 55 05        SHLD fs_selfName
-0616   0381 60              MOV H, B
-0617   0382 69              MOV L, C
-0618   0383 22 88 03        SHLD fs_entry_n+1
-0619   0386               
-0620   0386 C9            ret
-0621   0387               ; --- fs_entry -----------------------------------------------------------------
-0622   0387             fs_entry:
-0623   0387             fs_entry_n:
-0624   0387 C3 00 00        JMP 0000h
-0625   038A               
-0626   038A C9            ret
-0627   038B               ; --- fs_open -----------------------------------------------------------------
-0628   038B             fs_open:
-0629   038B 22 5D 05      shld fs_open_1
-0630   038E               ; 5 return fs_open0(name, O_OPEN);
-0631   038E 22 62 05      shld fs_open0_1
-0632   0391 AF            xra a
-0633   0392 C3 1C 05      jmp fs_open0
-0634   0395 C9            ret
-0635   0396               ; --- apogeyScreen3a -----------------------------------------------------------------
-0636   0396             apogeyScreen3a:
-0637   0396 C5            push b
-0638   0397               ; 3 memset((uchar*)MEM_ADDR, 0, (HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+2); 
-0639   0397 21 FF C0      lxi h, 49407
-0640   039A 22 65 05      shld memset_1
-0641   039D AF            xra a
-0642   039E 32 67 05      sta memset_2
-0643   03A1 21 01 0F      lxi h, 3841
-0644   03A4 CD 2B 05      call memset
-0645   03A7               ; 4 for(v=(uchar*)(MEM_ADDR)-1, i=TOP_INVISIBLE; i; --i) 
-0646   03A7 01 FE C0      lxi b, 49406
-0647   03AA 3E 07         mvi a, 7
-0648   03AC 32 5F 05      sta apogeyScreen3a_i
-0649   03AF             l0:
-0650   03AF               ; convertToConfition
-0651   03AF 3A 5F 05      lda apogeyScreen3a_i
-0652   03B2 B7            ora a
-0653   03B3 CA C2 03      jz l1
-0654   03B6               ; 5 v+=2, *v = 0xF1; —ложение BC с константой 2
-0655   03B6 03            inx b
-0656   03B7 03            inx b
-0657   03B8 3E F1         mvi a, 241
-0658   03BA 02            stax b
-0659   03BB             l2:
-0660   03BB 21 5F 05      lxi h, apogeyScreen3a_i
-0661   03BE 35            dcr m
-0662   03BF C3 AF 03      jmp l0
-0663   03C2             l1:
-0664   03C2               ; 6 if(FILL_EOL) 7 for(i = HEIGHT; i; --i) 
-0665   03C2 3E 33         mvi a, 51
-0666   03C4 32 5F 05      sta apogeyScreen3a_i
-0667   03C7             l4:
-0668   03C7               ; convertToConfition
-0669   03C7 3A 5F 05      lda apogeyScreen3a_i
-0670   03CA B7            ora a
-0671   03CB CA DE 03      jz l5
-0672   03CE               ; 8 v += (BPL), *v = 0xF1; —ложение с BC
-0673   03CE 21 4B 00      lxi h, 75
-0674   03D1 09            dad b
-0675   03D2 44            mov b, h
-0676   03D3 4D            mov c, l
-0677   03D4 3E F1         mvi a, 241
-0678   03D6 02            stax b
-0679   03D7             l6:
-0680   03D7 21 5F 05      lxi h, apogeyScreen3a_i
-0681   03DA 35            dcr m
-0682   03DB C3 C7 03      jmp l4
-0683   03DE             l5:
-0684   03DE               ; 9 ((uchar*)MEM_ADDR)[(HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+1] = 0xFF; 
-0685   03DE 21 FF CF      lxi h, 53247
-0686   03E1 36 FF         mvi m, 255
-0687   03E3               ; 10 apogeyVideoMem = (uchar*)(MEM_ADDR) + (TOP_INVISIBLE)*2 + 9; 
-0688   03E3 21 16 C1      lxi h, 49430
-0689   03E6 22 6A 05      shld apogeyVideoMem
-0690   03E9               ; 11 apogeyVideoBpl = (BPL); 
-0691   03E9 3E 4B         mvi a, 75
-0692   03EB 32 6C 05      sta apogeyVideoBpl
-0693   03EE               ; 1 ((uchar*)0xEF00)
-0694   03EE 21 01 EF      lxi h, 61185
-0695   03F1 36 00         mvi m, 0
-0696   03F3               ; 1 ((uchar*)0xEF00)
-0697   03F3 2D            dcr l
-0698   03F4 36 4D         mvi m, 77
-0699   03F6               ; 1 ((uchar*)0xEF00)
-0700   03F6 36 7F         mvi m, 127
-0701   03F8               ; 1 ((uchar*)0xEF00)
-0702   03F8 36 33         mvi m, 51
-0703   03FA               ; 1 ((uchar*)0xEF00)
-0704   03FA 36 53         mvi m, 83
-0705   03FC               ; 1 ((uchar*)0xEF00)
-0706   03FC 2C            inr l
-0707   03FD 36 23         mvi m, 35
-0708   03FF               ; 7 while((VG75[1] & 0x20) == 0); 
-0709   03FF             l13:
-0710   03FF 3A 01 EF      lda 61185
-0711   0402 E6 20         ani 32
-0712   0404 C2 0A 04      jnz l14
-0713   0407 C3 FF 03      jmp l13
-0714   040A             l14:
-0715   040A               ; 8 while((VG75[1] & 0x20) == 0); 
-0716   040A             l15:
-0717   040A 3A 01 EF      lda 61185
-0718   040D E6 20         ani 32
-0719   040F C2 15 04      jnz l16
-0720   0412 C3 0A 04      jmp l15
-0721   0415             l16:
-0722   0415               ; 1 ((uchar*)0xF000)
-0723   0415 21 08 F0      lxi h, 61448
-0724   0418 36 80         mvi m, 128
-0725   041A               ; 1 ((uchar*)0xF000)
-0726   041A 2E 04         mvi l, 4
-0727   041C 36 FF         mvi m, 255
-0728   041E               ; 1 ((uchar*)0xF000)
-0729   041E 36 C0         mvi m, 192
-0730   0420               ; 1 ((uchar*)0xF000)
-0731   0420 2C            inr l
-0732   0421 36 00         mvi m, 0
-0733   0423               ; 1 ((uchar*)0xF000)
-0734   0423 36 4F         mvi m, 79
-0735   0425               ; 1 ((uchar*)0xF000)
-0736   0425 2E 08         mvi l, 8
-0737   0427 36 A4         mvi m, 164
-0738   0429               ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 
-0739   0429 FB           ei 
-0740   042A               ; 15 asm { di } 
-0741   042A C1            pop b
-0742   042B C9            ret
-0743   042C               ; --- apogeyScreen2a -----------------------------------------------------------------
-0744   042C             apogeyScreen2a:
-0745   042C C5            push b
-0746   042D               ; 3 memset((uchar*)MEM_ADDR, 0, (HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+2); 
-0747   042D 21 D0 E1      lxi h, 57808
-0748   0430 22 65 05      shld memset_1
-0749   0433 AF            xra a
-0750   0434 32 67 05      sta memset_2
-0751   0437 21 1D 09      lxi h, 2333
-0752   043A CD 2B 05      call memset
-0753   043D               ; 4 for(v=(uchar*)(MEM_ADDR)-1, i=TOP_INVISIBLE; i; --i) 
-0754   043D 01 CF E1      lxi b, 57807
-0755   0440 3E 03         mvi a, 3
-0756   0442 32 60 05      sta apogeyScreen2a_i
-0757   0445             l19:
-0758   0445               ; convertToConfition
-0759   0445 3A 60 05      lda apogeyScreen2a_i
-0760   0448 B7            ora a
-0761   0449 CA 58 04      jz l20
-0762   044C               ; 5 v+=2, *v = 0xF1; —ложение BC с константой 2
-0763   044C 03            inx b
-0764   044D 03            inx b
-0765   044E 3E F1         mvi a, 241
-0766   0450 02            stax b
-0767   0451             l21:
-0768   0451 21 60 05      lxi h, apogeyScreen2a_i
-0769   0454 35            dcr m
-0770   0455 C3 45 04      jmp l19
-0771   0458             l20:
-0772   0458               ; 6 if(FILL_EOL) 7 for(i = HEIGHT; i; --i) 
-0773   0458 3E 1F         mvi a, 31
-0774   045A 32 60 05      sta apogeyScreen2a_i
-0775   045D             l23:
-0776   045D               ; convertToConfition
-0777   045D 3A 60 05      lda apogeyScreen2a_i
-0778   0460 B7            ora a
-0779   0461 CA 74 04      jz l24
-0780   0464               ; 8 v += (BPL), *v = 0xF1; —ложение с BC
-0781   0464 21 4B 00      lxi h, 75
-0782   0467 09            dad b
-0783   0468 44            mov b, h
-0784   0469 4D            mov c, l
-0785   046A 3E F1         mvi a, 241
-0786   046C 02            stax b
-0787   046D             l25:
-0788   046D 21 60 05      lxi h, apogeyScreen2a_i
-0789   0470 35            dcr m
-0790   0471 C3 5D 04      jmp l23
-0791   0474             l24:
-0792   0474               ; 9 ((uchar*)MEM_ADDR)[(HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+1] = 0xFF; 
-0793   0474 21 EC EA      lxi h, 60140
-0794   0477 36 FF         mvi m, 255
-0795   0479               ; 10 apogeyVideoMem = (uchar*)(MEM_ADDR) + (TOP_INVISIBLE)*2 + 9; 
-0796   0479 21 DF E1      lxi h, 57823
-0797   047C 22 6A 05      shld apogeyVideoMem
-0798   047F               ; 11 apogeyVideoBpl = (BPL); 
-0799   047F 3E 4B         mvi a, 75
-0800   0481 32 6C 05      sta apogeyVideoBpl
-0801   0484               ; 1 ((uchar*)0xEF00)
-0802   0484 21 01 EF      lxi h, 61185
-0803   0487 36 00         mvi m, 0
-0804   0489               ; 1 ((uchar*)0xEF00)
-0805   0489 2D            dcr l
-0806   048A 36 4D         mvi m, 77
-0807   048C               ; 1 ((uchar*)0xEF00)
-0808   048C 36 64         mvi m, 100
-0809   048E               ; 1 ((uchar*)0xEF00)
-0810   048E 36 77         mvi m, 119
-0811   0490               ; 1 ((uchar*)0xEF00)
-0812   0490 36 53         mvi m, 83
-0813   0492               ; 1 ((uchar*)0xEF00)
-0814   0492 2C            inr l
-0815   0493 36 23         mvi m, 35
-0816   0495               ; 7 while((VG75[1] & 0x20) == 0); 
-0817   0495             l32:
-0818   0495 3A 01 EF      lda 61185
-0819   0498 E6 20         ani 32
-0820   049A C2 A0 04      jnz l33
-0821   049D C3 95 04      jmp l32
-0822   04A0             l33:
-0823   04A0               ; 8 while((VG75[1] & 0x20) == 0); 
-0824   04A0             l34:
-0825   04A0 3A 01 EF      lda 61185
-0826   04A3 E6 20         ani 32
-0827   04A5 C2 AB 04      jnz l35
-0828   04A8 C3 A0 04      jmp l34
-0829   04AB             l35:
-0830   04AB               ; 1 ((uchar*)0xF000)
-0831   04AB 21 08 F0      lxi h, 61448
-0832   04AE 36 80         mvi m, 128
-0833   04B0               ; 1 ((uchar*)0xF000)
-0834   04B0 2E 04         mvi l, 4
-0835   04B2 36 D0         mvi m, 208
-0836   04B4               ; 1 ((uchar*)0xF000)
-0837   04B4 36 E1         mvi m, 225
-0838   04B6               ; 1 ((uchar*)0xF000)
-0839   04B6 2C            inr l
-0840   04B7 36 1C         mvi m, 28
-0841   04B9               ; 1 ((uchar*)0xF000)
-0842   04B9 36 49         mvi m, 73
-0843   04BB               ; 1 ((uchar*)0xF000)
-0844   04BB 2E 08         mvi l, 8
-0845   04BD 36 A4         mvi m, 164
-0846   04BF               ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 15 asm { di } 
-0847   04BF F3           di 
-0848   04C0 C1            pop b
-0849   04C1 C9            ret
-0850   04C2               ; --- apogeyScreen0 -----------------------------------------------------------------
-0851   04C2             apogeyScreen0:
-0852   04C2 C5            push b
-0853   04C3               ; 3 memset((uchar*)(MEM_ADDR), 0, (FULL_HEIGHT)*(BPL)); 
-0854   04C3 21 D0 E1      lxi h, 57808
-0855   04C6 22 65 05      shld memset_1
-0856   04C9 AF            xra a
-0857   04CA 32 67 05      sta memset_2
-0858   04CD 21 24 09      lxi h, 2340
-0859   04D0 CD 2B 05      call memset
-0860   04D3               ; 4 if(FILL_EOL) { 5 v = (uchar*)(MEM_ADDR)-1; 9 apogeyVideoMem = (uchar*)(MEM_ADDR) + (TOP_INVISIBLE)*(BPL) + ((HIDDEN_ATTRIB) ? 9 : 8); 
-0861   04D3 21 C2 E2      lxi h, 58050
-0862   04D6 22 6A 05      shld apogeyVideoMem
-0863   04D9               ; 10 apogeyVideoBpl = (BPL); 
-0864   04D9 3E 4E         mvi a, 78
-0865   04DB 32 6C 05      sta apogeyVideoBpl
-0866   04DE               ; 1 ((uchar*)0xEF00)
-0867   04DE 21 01 EF      lxi h, 61185
-0868   04E1 36 00         mvi m, 0
-0869   04E3               ; 1 ((uchar*)0xEF00)
-0870   04E3 2D            dcr l
-0871   04E4 36 4D         mvi m, 77
-0872   04E6               ; 1 ((uchar*)0xEF00)
-0873   04E6 36 1D         mvi m, 29
-0874   04E8               ; 1 ((uchar*)0xEF00)
-0875   04E8 36 99         mvi m, 153
-0876   04EA               ; 1 ((uchar*)0xEF00)
-0877   04EA 36 D3         mvi m, 211
-0878   04EC               ; 1 ((uchar*)0xEF00)
-0879   04EC 2C            inr l
-0880   04ED 36 23         mvi m, 35
-0881   04EF               ; 7 while((VG75[1] & 0x20) == 0); 
-0882   04EF             l50:
-0883   04EF 3A 01 EF      lda 61185
-0884   04F2 E6 20         ani 32
-0885   04F4 C2 FA 04      jnz l51
-0886   04F7 C3 EF 04      jmp l50
-0887   04FA             l51:
-0888   04FA               ; 8 while((VG75[1] & 0x20) == 0); 
-0889   04FA             l52:
-0890   04FA 3A 01 EF      lda 61185
-0891   04FD E6 20         ani 32
-0892   04FF C2 05 05      jnz l53
-0893   0502 C3 FA 04      jmp l52
-0894   0505             l53:
-0895   0505               ; 1 ((uchar*)0xF000)
-0896   0505 21 08 F0      lxi h, 61448
-0897   0508 36 80         mvi m, 128
-0898   050A               ; 1 ((uchar*)0xF000)
-0899   050A 2E 04         mvi l, 4
-0900   050C 36 D0         mvi m, 208
-0901   050E               ; 1 ((uchar*)0xF000)
-0902   050E 36 E1         mvi m, 225
-0903   0510               ; 1 ((uchar*)0xF000)
-0904   0510 2C            inr l
-0905   0511 36 23         mvi m, 35
-0906   0513               ; 1 ((uchar*)0xF000)
-0907   0513 36 49         mvi m, 73
-0908   0515               ; 1 ((uchar*)0xF000)
-0909   0515 2E 08         mvi l, 8
-0910   0517 36 A4         mvi m, 164
-0911   0519               ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 15 asm { di } 
-0912   0519 F3           di 
-0913   051A C1            pop b
-0914   051B C9            ret
-0915   051C               ; --- fs_open0 -----------------------------------------------------------------
-0916   051C             fs_open0:
-0917   051C 32 64 05      sta fs_open0_2
-0918   051F               ; 5 asm {      
-0919   051F                   
-0920   051F C5              PUSH B
-0921   0520                 ; a = fs_open0_2
-0922   0520 57              MOV  D, A 
-0923   0521 2A 62 05        LHLD fs_open0_1
-0924   0524 3E 02           MVI  A, 2
-0925   0526 CD 87 03        CALL fs_entry
-0926   0529 C1              POP  B
-0927   052A               
-0928   052A C9            ret
-0929   052B               ; --- memset -----------------------------------------------------------------
-0930   052B             memset:
-0931   052B 22 68 05      shld memset_3
-0932   052E               ; 2 asm {
-0933   052E C5              push b
-0934   052F 3A 67 05        lda memset_2
-0935   0532 EB              xchg
-0936   0533 2A 65 05        lhld memset_1
-0937   0536 EB              xchg
-0938   0537 01 FF FF        lxi b, -1    
-0939   053A             memset_l1:
-0940   053A 09              dad b
-0941   053B D2 43 05        jnc memset_l2
-0942   053E 12              stax d
-0943   053F 13              inx d
-0944   0540 C3 3A 05        jmp memset_l1
-0945   0543             memset_l2:
-0946   0543 C1              pop b
-0947   0544               
-0948   0544 C9            ret
-0949   0545             main_i:
-0950   0545              .ds 2
-0951   0547             main_j:
-0952   0547              .ds 2
-0953   0549             main_c:
-0954   0549              .ds 1
-0955   054A             main_FifoReadPointer:
-0956   054A              .ds 2
-0957   054C             main_FifoWritePointer:
-0958   054C              .ds 2
-0959   054E             main_iNumberOfFrames:
-0960   054E              .ds 2
-0961   0550             main_iFrameCounter:
-0962   0550              .ds 2
-0963   0552             fs_cmdLine:
-0964   0552 54 05        .dw $+2
-0965   0554              .ds 1
-0966   0555             fs_selfName:
-0967   0555 57 05        .dw $+2
-0968   0557              .ds 1
-0969   0558             fs_low:
-0970   0558              .ds 2
-0971   055A             fs_high:
-0972   055A              .ds 2
-0973   055C             fs_addr:
-0974   055C              .ds 1
-0975   055D             fs_open_1:
-0976   055D              .ds 2
-0977   055F             apogeyScreen3a_i:
-0978   055F              .ds 1
-0979   0560             apogeyScreen2a_i:
-0980   0560              .ds 1
-0981   0561             apogeyScreen0_i:
-0982   0561              .ds 1
-0983   0562             fs_open0_1:
-0984   0562              .ds 2
-0985   0564             fs_open0_2:
-0986   0564              .ds 1
-0987   0565             memset_1:
-0988   0565              .ds 2
-0989   0567             memset_2:
-0990   0567              .ds 1
-0991   0568             memset_3:
-0992   0568              .ds 2
-0993   056A             apogeyVideoMem:
-0994   056A C2 E2        .dw 58050
-0995   056C             
-0996   056C             apogeyVideoBpl:
-0997   056C 4E           .db 78
-0998   056D             
-0999   056D             string0:
-1000   056D 56 49 44 45  .db 86,73,68,69,79,47,65,80,80,76,69,46,65,80,86,0
-1000   0571 4F 2F 41 50 
-1000   0575 50 4C 45 2E 
-1000   0579 41 50 56 00 
-1001   057D               .end
+0003   0003 21 57 FF    	  LXI  H, 0FF57h
+0004   0006 7E          	  MOV A,M
+0005   0007 FE 90       	  CPI 090h
+0006   0009 C2 29 00    	  JNZ Machine_Test_Not_Apogey
+0007   000C 23          	  INX  H
+0008   000D 7E          	  MOV A,M
+0009   000E FE 61       	  CPI 061h
+0010   0010 C2 29 00    	  JNZ Machine_Test_Not_Apogey
+0011   0013 23          	  INX  H
+0012   0014 7E          	  MOV A,M
+0013   0015 FE 70       	  CPI 070h
+0014   0017 C2 29 00    	  JNZ Machine_Test_Not_Apogey
+0015   001A 23          	  INX  H
+0016   001B 7E          	  MOV A,M
+0017   001C FE 6F       	  CPI 06Fh
+0018   001E C2 29 00    	  JNZ Machine_Test_Not_Apogey
+0019   0021 3E 00       	  MVI A,00
+0020   0023 32 D9 05    	  STA main_Machine_Type
+0021   0026 C3 58 00    	  JMP Machine_Test_Done
+0022   0029             Machine_Test_Not_Apogey:
+0023   0029 21 5B FF    	  LXI  H, 0FF5Bh
+0024   002C 7E          	  MOV A,M
+0025   002D FE 72       	  CPI 072h
+0026   002F C2 4F 00    	  JNZ Machine_Test_Not_Radio
+0027   0032 23          	  INX  H
+0028   0033 7E          	  MOV A,M
+0029   0034 FE 61       	  CPI 061h
+0030   0036 C2 4F 00    	  JNZ Machine_Test_Not_Radio
+0031   0039 23          	  INX  H
+0032   003A 7E          	  MOV A,M
+0033   003B FE 64       	  CPI 064h
+0034   003D C2 4F 00    	  JNZ Machine_Test_Not_Radio
+0035   0040 23          	  INX  H
+0036   0041 7E          	  MOV A,M
+0037   0042 FE 69       	  CPI 069h
+0038   0044 C2 4F 00    	  JNZ Machine_Test_Not_Radio
+0039   0047 3E 01       	  MVI A,01
+0040   0049 32 D9 05    	  STA main_Machine_Type
+0041   004C C3 58 00    	  JMP Machine_Test_Done
+0042   004F             Machine_Test_Not_Radio:
+0043   004F 21 C1 01    	  LXI H, str_Unknown_Machine
+0044   0052 CD 18 F8    	  CALL 0F818h ;using standard monitor function on unknown machines
+0045   0055 C3 75 F8    	  JMP 0F875h ;jump to monitor
+0046   0058             Machine_Test_Done:
+0047   0058               
+0048   0058               ; 65 asm {
+0049   0058 3E 01            MVI  A, 1		; Версия контроллера
+0050   005A 01 17 DE         LXI  B, 0DE17h; BiosEntry  ; Точка входа SD BIOS
+0051   005D 11 F3 DB         LXI  D, 0DBF3h; SELF_NAME  ; Собственное имя
+0052   0060 21 F3 DC         LXI  H, 0DCF3h; CMD_LINE   ; Командная строка
+0053   0063               
+0054   0063               ; 72 fs_init();
+0055   0063 CD 01 04      call fs_init
+0056   0066               ; 1 ((uchar*)0xEF00)
+0057   0066 21 01 EF      lxi h, 61185
+0058   0069 36 80         mvi m, 128
+0059   006B               ; 1 ((uchar*)0xEF00)
+0060   006B 2D            dcr l
+0061   006C 36 FF         mvi m, 255
+0062   006E               ; 1 ((uchar*)0xEF00)
+0063   006E 36 FF         mvi m, 255
+0064   0070               ; 79 fs_open("VIDEO/APPLE.APV");
+0065   0070 21 F6 05      lxi h, string0
+0066   0073 CD 12 04      call fs_open
+0067   0076               ; 82 asm{
+0068   0076 11 00 40    	LXI D, 04000h
+0069   0079 21 00 01    	LXI H, 00100h ; header 256 bytes
+0070   007C 3E 04           MVI  A, 004h;read command
+0071   007E CD 0E 04    	CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
+0072   0081 2A 04 40    	LHLD 04004h 
+0073   0084 22 D5 05    	SHLD main_iNumberOfFrames
+0074   0087 2A 00 40    	LHLD 04000h
+0075   008A 7C          	MOV A,H
+0076   008B 32 DA 05    	STA main_Screen_Type
+0077   008E FE 00       	CPI 0h
+0078   0090 C2 99 00    	JNZ SetScreen128x60
+0079   0093             SetScreen192x102:
+0080   0093               
+0081   0093               ; 96 apogeyScreen3A();
+0082   0093 CD 1D 04      call apogeyScreen3a
+0083   0096               ; 97 asm {
+0084   0096 C3 9C 00    	JMP SetScreenDone
+0085   0099             SetScreen128x60:
+0086   0099               
+0087   0099               ; 101 apogeyScreen2A();
+0088   0099 CD B3 04      call apogeyScreen2a
+0089   009C               ; 102 asm
+0090   009C             SetScreenDone:
+0091   009C             	
+0092   009C               
+0093   009C               ; 109 asm{
+0094   009C 21 00 40    	  LXI H, 04000h
+0095   009F 22 D1 05    	  SHLD main_FifoReadPointer
+0096   00A2 22 D3 05    	  SHLD main_FifoWritePointer
+0097   00A5               
+0098   00A5               ; 116 asm{
+0099   00A5 2A D3 05    	LHLD main_FifoWritePointer
+0100   00A8 EB          	XCHG
+0101   00A9 21 00 30    	LXI H, 03000h ; размер передачи 12k
+0102   00AC 3E 04           MVI  A, 004h;read command
+0103   00AE CD 0E 04    	CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
+0104   00B1 21 00 70    	LXI H, 07000h
+0105   00B4 22 D3 05    	SHLD main_FifoWritePointer
+0106   00B7             	;DI ;for debug
+0107   00B7               
+0108   00B7               ; 127 iFrameCounter = iNumberOfFrames;
+0109   00B7 2A D5 05      lhld main_iNumberOfFrames
+0110   00BA 22 D7 05      shld main_iFrameCounter
+0111   00BD               ; 129 asm{
+0112   00BD             Main_Loop_Start:
+0113   00BD 2A D7 05    	LHLD main_iFrameCounter
+0114   00C0 AF          	XRA A ; A=0
+0115   00C1 BC          	CMP H
+0116   00C2 C2 CC 00    	JNZ Fifo_Write_Start
+0117   00C5 BD          	CMP L
+0118   00C6 C2 CC 00    	JNZ Fifo_Write_Start
+0119   00C9 C3 BB 01    	JMP Do_Exit
+0120   00CC             Fifo_Write_Start:
+0121   00CC             	; first check if we have enough free space in fifo, granularity is 1024 bytes
+0122   00CC             	; fifo is almost full when either (write!=7C00 and read-write>0 and read-write-8 < 0), or ( write=7C00 and (read> 7C00 or read < 4400) )
+0123   00CC 2A D3 05    	LHLD main_FifoWritePointer
+0124   00CF 7C          	MOV A,H
+0125   00D0 FE 7C       	CPI 07Ch
+0126   00D2 CA E9 00    	JZ Fifo_Write_Start2
+0127   00D5             	;not end-buffer case, check read-write>0
+0128   00D5 2A D1 05    	LHLD main_FifoReadPointer
+0129   00D8 7C          	MOV A,H
+0130   00D9 2A D3 05    	LHLD main_FifoWritePointer
+0131   00DC BC          	CMP H
+0132   00DD FA FA 00    	JM Fifo_Write_Do ;read-write < 0, not skipping
+0133   00E0             	;check read-write-8 < 0
+0134   00E0 94          	SUB H
+0135   00E1 D6 08       	SUI 08h
+0136   00E3 F2 FA 00    	JP Fifo_Write_Do ;read-write-8 > 0, not skipping
+0137   00E6 C3 18 01    	JMP Fifo_Read_Start ;skipping after all
+0138   00E9             Fifo_Write_Start2:
+0139   00E9             	;end-buffer case, checking if read > 7C00 (not wrapped) 
+0140   00E9 2A D1 05    	LHLD main_FifoReadPointer
+0141   00EC 7C          	MOV A,H
+0142   00ED FE 7C       	CPI 07Ch
+0143   00EF F2 18 01    	JP Fifo_Read_Start ;read is > 7C00, skipping write
+0144   00F2             	;now check if read < 4400 (wrapped) 
+0145   00F2 FE 45       	CPI 045h
+0146   00F4 FA 18 01    	JM Fifo_Read_Start ;read is < 4400, skipping write
+0147   00F7 C3 FA 00    	JMP Fifo_Write_Do ;writing after all
+0148   00FA             Fifo_Write_Do:
+0149   00FA 2A D3 05    	LHLD main_FifoWritePointer
+0150   00FD EB          	XCHG
+0151   00FE 21 00 04    	LXI H, 00400h ; размер передачи 1024 байт
+0152   0101 3E 04           MVI  A, 004h;read command
+0153   0103 CD 0E 04    	CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
+0154   0106 2A D3 05    	LHLD main_FifoWritePointer
+0155   0109 3E 04       	MVI A, 004h
+0156   010B 84          	ADD H
+0157   010C 67          	MOV H, A
+0158   010D 3E 80       	MVI A,080h
+0159   010F BC          	CMP H
+0160   0110 C2 15 01    	JNZ Fifo_Write_Do2 ;if fifo write pointer is not at 0x8000, move on
+0161   0113 26 40       	MVI H,040h ; else wrap back to 0x4000 and move on
+0162   0115             Fifo_Write_Do2:	
+0163   0115 22 D3 05    	SHLD main_FifoWritePointer
+0164   0118             
+0165   0118             	
+0166   0118             Fifo_Read_Start:
+0167   0118             	;first thing to do is to check that we have at least full frame worth of fifo data
+0168   0118             	;if we dont, wait for fifo to fill up
+0169   0118             	;there are 2 cases of empty fifo: (write > read) and (write - read < 16) (normal case),
+0170   0118             	;								or (write < read) and (read - write > 48) (wrap case)
+0171   0118 2A D3 05    	LHLD main_FifoWritePointer
+0172   011B 7C          	MOV A,H
+0173   011C 2A D1 05    	LHLD main_FifoReadPointer
+0174   011F 94          	SUB H
+0175   0120 F2 33 01    	JP Fifo_Read_Normal
+0176   0123             	;wrap case, calculating (read - write) instead
+0177   0123 2A D1 05    	LHLD main_FifoReadPointer
+0178   0126 7C          	MOV A,H
+0179   0127 2A D3 05    	LHLD main_FifoWritePointer
+0180   012A 94          	SUB H
+0181   012B             	;ok, weve got (read - write),it should be positive. now check if its bigger than 48
+0182   012B D6 30       	SUI 030h
+0183   012D F2 BD 00    	JP Main_Loop_Start ;it IS bigger, meaning FIFO is almost empty, skipping read
+0184   0130 C3 38 01    	JMP Fifo_Read_Do
+0185   0133             Fifo_Read_Normal:
+0186   0133             	;normal case, diff (write - read) is already in A, checking if its bigger than 16
+0187   0133 D6 10       	SUI 010h
+0188   0135 FA BD 00    	JM Main_Loop_Start ;it is NOT bigger, meaning FIFO is almost empty, skipping read	
+0189   0138             Fifo_Read_Do:
+0190   0138             	;decrease frame counter
+0191   0138 2A D7 05    	LHLD main_iFrameCounter
+0192   013B 2B          	DCX H
+0193   013C 22 D7 05    	SHLD main_iFrameCounter
+0194   013F             	;okay, FIFO is not empty, but current frame might be wrapping around FIFO end
+0195   013F             	;we check this by adding frame size to read pointer
+0196   013F 2A D1 05    	LHLD main_FifoReadPointer
+0197   0142 23          	INX H
+0198   0143 23          	INX H
+0199   0144 5E          	MOV E,M
+0200   0145 23          	INX H
+0201   0146 56          	MOV D,M
+0202   0147 23          	INX H
+0203   0148 19          	DAD D
+0204   0149 7C          	MOV A,H
+0205   014A D6 80       	SUI 080h
+0206   014C FA 94 01    	JM Fifo_Read_Do2 ;if frame is NOT wrapped, unpack it as is
+0207   014F             	;frame IS wrapped, copy part that doesnt fit from 4000 to 8000
+0208   014F             	;HL still stores overwrapped value, so use that
+0209   014F E5          	PUSH H
+0210   0150 C1          	POP B
+0211   0151 78          	MOV A,B
+0212   0152 E6 0F       	ANI 00Fh
+0213   0154 47          	MOV B,A ;now we have a size in BC
+0214   0155 21 00 40    	LXI H, 04000h
+0215   0158 11 00 80    	LXI D, 08000h
+0216   015B             Fifo_Read_Copy_Loop:
+0217   015B 7E          	MOV A,M
+0218   015C 12          	STAX D
+0219   015D 23          	INX H
+0220   015E 13          	INX D
+0221   015F 0B          	DCX B
+0222   0160 AF          	XRA A ; A=0
+0223   0161 B8          	CMP B
+0224   0162 C2 5B 01    	JNZ Fifo_Read_Copy_Loop
+0225   0165 B9          	CMP C
+0226   0166 C2 5B 01    	JNZ Fifo_Read_Copy_Loop
+0227   0169             	;copy done, now processing frame as-is
+0228   0169             	;we should init DE before calling unpack, this is screen-dependent
+0229   0169 3A DA 05    	LDA main_Screen_Type
+0230   016C FE 01       	CPI 01h
+0231   016E CA 77 01    	JZ Fifo_Read_Screen_Type_1
+0232   0171 11 13 C1    	LXI D, 0C113h ;ScreenStart	
+0233   0174 C3 7A 01    	JMP Fifo_Read_Screen_Type_Done
+0234   0177             Fifo_Read_Screen_Type_1:	
+0235   0177 11 DA E1    	LXI D, 0E1DAh ;ScreenStart
+0236   017A             Fifo_Read_Screen_Type_Done:
+0237   017A 2A D1 05    	LHLD main_FifoReadPointer
+0238   017D CD D2 01    	CALL unpack_btree1
+0239   0180             	;now move read pointer
+0240   0180 2A D1 05    	LHLD main_FifoReadPointer
+0241   0183 23          	INX H
+0242   0184 23          	INX H
+0243   0185 5E          	MOV E,M
+0244   0186 23          	INX H
+0245   0187 56          	MOV D,M
+0246   0188 23          	INX H
+0247   0189 19          	DAD D
+0248   018A 7C          	MOV A,H
+0249   018B D6 40       	SUI 040h
+0250   018D 67          	MOV H,A
+0251   018E 22 D1 05    	SHLD main_FifoReadPointer
+0252   0191 C3 BD 00    	JMP Main_Loop_Start ;go back to mail loop start	
+0253   0194             	
+0254   0194             Fifo_Read_Do2:	
+0255   0194             	;non-wrapped unpack
+0256   0194             	;we should init DE before calling unpack, this is screen-dependent
+0257   0194 3A DA 05    	LDA main_Screen_Type
+0258   0197 FE 01       	CPI 01h
+0259   0199 CA A2 01    	JZ Fifo_Read2_Screen_Type_1
+0260   019C 11 13 C1    	LXI D, 0C113h ;ScreenStart	
+0261   019F C3 A5 01    	JMP Fifo_Read2_Screen_Type_Done
+0262   01A2             Fifo_Read2_Screen_Type_1:	
+0263   01A2 11 DA E1    	LXI D, 0E1DAh ;ScreenStart
+0264   01A5             Fifo_Read2_Screen_Type_Done:
+0265   01A5 2A D1 05    	LHLD main_FifoReadPointer
+0266   01A8 CD D2 01    	CALL unpack_btree1
+0267   01AB             	;now move read pointer
+0268   01AB 2A D1 05    	LHLD main_FifoReadPointer
+0269   01AE 23          	INX H
+0270   01AF 23          	INX H
+0271   01B0 5E          	MOV E,M
+0272   01B1 23          	INX H
+0273   01B2 56          	MOV D,M
+0274   01B3 23          	INX H
+0275   01B4 19          	DAD D
+0276   01B5 22 D1 05    	SHLD main_FifoReadPointer
+0277   01B8 C3 BD 00    	JMP Main_Loop_Start ;go back to mail loop start
+0278   01BB             
+0279   01BB             Do_Exit:
+0280   01BB               
+0281   01BB               ; 300 apogeyScreen0();
+0282   01BB CD 49 05      call apogeyScreen0
+0283   01BE               ; 301 asm {
+0284   01BE C3 75 F8    		JMP 0F875h ;jump to monitor
+0285   01C1             	
+0286   01C1               ; 305 asm{
+0287   01C1 55 4E 4B 4E str_Unknown_Machine:	.db "UNKNOWN MACHINE",0
+0287   01C5 4F 57 4E 20 
+0287   01C9 4D 41 43 48 
+0287   01CD 49 4E 45 00 
+0288   01D1             	
+0289   01D1 C9            ret
+0290   01D2               ; --- unpack_btree1 -----------------------------------------------------------------
+0291   01D2             unpack_btree1:
+0292   01D2 23          	INX H
+0293   01D3 23          	INX H
+0294   01D4 23          	INX H
+0295   01D5 23          	INX H
+0296   01D6             	;LXI D, 0C113h ;ScreenStart
+0297   01D6             	;LXI D, 0E1DAh ;ScreenStart
+0298   01D6 7E          	MOV A,M ;load 1st byte into A
+0299   01D7 23          	INX H ;move to next byte
+0300   01D8 47          	MOV B,A ;save A
+0301   01D9 E6 01       	ANI 001h
+0302   01DB CA E4 01    	JZ unpack_level1_1
+0303   01DE CD 69 02    	CALL unpack_level2
+0304   01E1 C3 EB 01    	JMP unpack_level1_1_end
+0305   01E4             unpack_level1_1:
+0306   01E4 E5          	PUSH H
+0307   01E5 21 58 02    	LXI H,0258h
+0308   01E8 19          	DAD D
+0309   01E9 EB          	XCHG
+0310   01EA E1          	POP H
+0311   01EB             unpack_level1_1_end:
+0312   01EB 78          	MOV A,B ;restore A
+0313   01EC E6 02       	ANI 002h
+0314   01EE CA F7 01    	JZ unpack_level1_2
+0315   01F1 CD 69 02    	CALL unpack_level2
+0316   01F4 C3 FE 01    	JMP unpack_level1_2_end
+0317   01F7             unpack_level1_2:
+0318   01F7 E5          	PUSH H
+0319   01F8 21 58 02    	LXI H,0258h
+0320   01FB 19          	DAD D
+0321   01FC EB          	XCHG
+0322   01FD E1          	POP H
+0323   01FE             unpack_level1_2_end:
+0324   01FE 78          	MOV A,B ;restore A
+0325   01FF E6 04       	ANI 004h
+0326   0201 CA 0A 02    	JZ unpack_level1_3
+0327   0204 CD 69 02    	CALL unpack_level2
+0328   0207 C3 11 02    	JMP unpack_level1_3_end
+0329   020A             unpack_level1_3:
+0330   020A E5          	PUSH H
+0331   020B 21 58 02    	LXI H,0258h
+0332   020E 19          	DAD D
+0333   020F EB          	XCHG
+0334   0210 E1          	POP H
+0335   0211             unpack_level1_3_end:
+0336   0211 78          	MOV A,B ;restore A
+0337   0212 E6 08       	ANI 008h
+0338   0214 CA 1D 02    	JZ unpack_level1_4
+0339   0217 CD 69 02    	CALL unpack_level2
+0340   021A C3 24 02    	JMP unpack_level1_4_end
+0341   021D             unpack_level1_4:
+0342   021D E5          	PUSH H
+0343   021E 21 58 02    	LXI H,0258h
+0344   0221 19          	DAD D
+0345   0222 EB          	XCHG
+0346   0223 E1          	POP H
+0347   0224             unpack_level1_4_end:
+0348   0224 78          	MOV A,B ;restore A
+0349   0225 E6 10       	ANI 010h
+0350   0227 CA 30 02    	JZ unpack_level1_5
+0351   022A CD 69 02    	CALL unpack_level2
+0352   022D C3 37 02    	JMP unpack_level1_5_end
+0353   0230             unpack_level1_5:
+0354   0230 E5          	PUSH H
+0355   0231 21 58 02    	LXI H,0258h
+0356   0234 19          	DAD D
+0357   0235 EB          	XCHG
+0358   0236 E1          	POP H
+0359   0237             unpack_level1_5_end:
+0360   0237 78          	MOV A,B ;restore A
+0361   0238 E6 20       	ANI 020h
+0362   023A CA 43 02    	JZ unpack_level1_6
+0363   023D CD 69 02    	CALL unpack_level2
+0364   0240 C3 4A 02    	JMP unpack_level1_6_end
+0365   0243             unpack_level1_6:
+0366   0243 E5          	PUSH H
+0367   0244 21 58 02    	LXI H,0258h
+0368   0247 19          	DAD D
+0369   0248 EB          	XCHG
+0370   0249 E1          	POP H
+0371   024A             unpack_level1_6_end:
+0372   024A 78          	MOV A,B ;restore A
+0373   024B E6 40       	ANI 040h
+0374   024D CA 56 02    	JZ unpack_level1_7
+0375   0250 CD 69 02    	CALL unpack_level2
+0376   0253 C3 5D 02    	JMP unpack_level1_7_end
+0377   0256             unpack_level1_7:
+0378   0256 E5          	PUSH H
+0379   0257 21 58 02    	LXI H,0258h
+0380   025A 19          	DAD D
+0381   025B EB          	XCHG
+0382   025C E1          	POP H
+0383   025D             unpack_level1_7_end:
+0384   025D 78          	MOV A,B ;restore A
+0385   025E E6 80       	ANI 080h
+0386   0260 CA 66 02    	JZ unpack_level1_8
+0387   0263 CD 69 02    	CALL unpack_level2
+0388   0266             unpack_level1_8:
+0389   0266 C3 FF 03    	JMP unpack_end
+0390   0269             	
+0391   0269             unpack_level2:
+0392   0269 C5          	PUSH B
+0393   026A 7E          	MOV A,M ;load byte into A
+0394   026B 23          	INX H ;move to next byte
+0395   026C 47          	MOV B,A ;save A
+0396   026D E6 01       	ANI 001h
+0397   026F CA 78 02    	JZ unpack_level2_1
+0398   0272 CD 06 03    	CALL unpack_level3
+0399   0275 C3 7F 02    	JMP unpack_level2_1_end
+0400   0278             unpack_level2_1:
+0401   0278 E5          	PUSH H
+0402   0279 21 4B 00    	LXI H,04Bh
+0403   027C 19          	DAD D
+0404   027D EB          	XCHG
+0405   027E E1          	POP H
+0406   027F             unpack_level2_1_end:
+0407   027F 78          	MOV A,B ;restore A
+0408   0280 E6 02       	ANI 002h
+0409   0282 CA 8B 02    	JZ unpack_level2_2
+0410   0285 CD 06 03    	CALL unpack_level3
+0411   0288 C3 92 02    	JMP unpack_level2_2_end
+0412   028B             unpack_level2_2:
+0413   028B E5          	PUSH H
+0414   028C 21 4B 00    	LXI H,04Bh
+0415   028F 19          	DAD D
+0416   0290 EB          	XCHG
+0417   0291 E1          	POP H
+0418   0292             unpack_level2_2_end:
+0419   0292 78          	MOV A,B ;restore A
+0420   0293 E6 04       	ANI 004h
+0421   0295 CA 9E 02    	JZ unpack_level2_3
+0422   0298 CD 06 03    	CALL unpack_level3
+0423   029B C3 A5 02    	JMP unpack_level2_3_end
+0424   029E             unpack_level2_3:
+0425   029E E5          	PUSH H
+0426   029F 21 4B 00    	LXI H,04Bh
+0427   02A2 19          	DAD D
+0428   02A3 EB          	XCHG
+0429   02A4 E1          	POP H
+0430   02A5             unpack_level2_3_end:
+0431   02A5 78          	MOV A,B ;restore A
+0432   02A6 E6 08       	ANI 008h
+0433   02A8 CA B1 02    	JZ unpack_level2_4
+0434   02AB CD 06 03    	CALL unpack_level3
+0435   02AE C3 B8 02    	JMP unpack_level2_4_end
+0436   02B1             unpack_level2_4:
+0437   02B1 E5          	PUSH H
+0438   02B2 21 4B 00    	LXI H,04Bh
+0439   02B5 19          	DAD D
+0440   02B6 EB          	XCHG
+0441   02B7 E1          	POP H
+0442   02B8             unpack_level2_4_end:
+0443   02B8 78          	MOV A,B ;restore A
+0444   02B9 E6 10       	ANI 010h
+0445   02BB CA C4 02    	JZ unpack_level2_5
+0446   02BE CD 06 03    	CALL unpack_level3
+0447   02C1 C3 CB 02    	JMP unpack_level2_5_end
+0448   02C4             unpack_level2_5:
+0449   02C4 E5          	PUSH H
+0450   02C5 21 4B 00    	LXI H,04Bh
+0451   02C8 19          	DAD D
+0452   02C9 EB          	XCHG
+0453   02CA E1          	POP H
+0454   02CB             unpack_level2_5_end:
+0455   02CB 78          	MOV A,B ;restore A
+0456   02CC E6 20       	ANI 020h
+0457   02CE CA D7 02    	JZ unpack_level2_6
+0458   02D1 CD 06 03    	CALL unpack_level3
+0459   02D4 C3 DE 02    	JMP unpack_level2_6_end
+0460   02D7             unpack_level2_6:
+0461   02D7 E5          	PUSH H
+0462   02D8 21 4B 00    	LXI H,04Bh
+0463   02DB 19          	DAD D
+0464   02DC EB          	XCHG
+0465   02DD E1          	POP H
+0466   02DE             unpack_level2_6_end:
+0467   02DE 78          	MOV A,B ;restore A
+0468   02DF E6 40       	ANI 040h
+0469   02E1 CA EA 02    	JZ unpack_level2_7
+0470   02E4 CD 06 03    	CALL unpack_level3
+0471   02E7 C3 F1 02    	JMP unpack_level2_7_end
+0472   02EA             unpack_level2_7:
+0473   02EA E5          	PUSH H
+0474   02EB 21 4B 00    	LXI H,04Bh
+0475   02EE 19          	DAD D
+0476   02EF EB          	XCHG
+0477   02F0 E1          	POP H
+0478   02F1             unpack_level2_7_end:
+0479   02F1 78          	MOV A,B ;restore A
+0480   02F2 E6 80       	ANI 080h
+0481   02F4 CA FD 02    	JZ unpack_level2_8
+0482   02F7 CD 06 03    	CALL unpack_level3
+0483   02FA C3 04 03    	JMP unpack_level2_8_end
+0484   02FD             unpack_level2_8:
+0485   02FD E5          	PUSH H
+0486   02FE 21 4B 00    	LXI H,04Bh
+0487   0301 19          	DAD D
+0488   0302 EB          	XCHG
+0489   0303 E1          	POP H
+0490   0304             unpack_level2_8_end:
+0491   0304 C1          	POP B
+0492   0305 C9          	RET
+0493   0306             
+0494   0306             unpack_level3:
+0495   0306 C5          	PUSH B
+0496   0307 7E          	MOV A,M ;load byte into A
+0497   0308 23          	INX H ;move to next byte
+0498   0309 47          	MOV B,A ;save A
+0499   030A E6 01       	ANI 001h
+0500   030C CA 15 03    	JZ unpack_level3_1
+0501   030F CD AA 03    	CALL unpack_level4
+0502   0312 C3 1C 03    	JMP unpack_level3_1_end
+0503   0315             unpack_level3_1:
+0504   0315 E5          	PUSH H
+0505   0316 21 08 00    	LXI H,008h
+0506   0319 19          	DAD D
+0507   031A EB          	XCHG
+0508   031B E1          	POP H
+0509   031C             unpack_level3_1_end:
+0510   031C 78          	MOV A,B ;restore A
+0511   031D E6 02       	ANI 002h
+0512   031F CA 28 03    	JZ unpack_level3_2
+0513   0322 CD AA 03    	CALL unpack_level4
+0514   0325 C3 2F 03    	JMP unpack_level3_2_end
+0515   0328             unpack_level3_2:
+0516   0328 E5          	PUSH H
+0517   0329 21 08 00    	LXI H,008h
+0518   032C 19          	DAD D
+0519   032D EB          	XCHG
+0520   032E E1          	POP H
+0521   032F             unpack_level3_2_end:
+0522   032F 78          	MOV A,B ;restore A
+0523   0330 E6 04       	ANI 004h
+0524   0332 CA 3B 03    	JZ unpack_level3_3
+0525   0335 CD AA 03    	CALL unpack_level4
+0526   0338 C3 42 03    	JMP unpack_level3_3_end
+0527   033B             unpack_level3_3:
+0528   033B E5          	PUSH H
+0529   033C 21 08 00    	LXI H,008h
+0530   033F 19          	DAD D
+0531   0340 EB          	XCHG
+0532   0341 E1          	POP H
+0533   0342             unpack_level3_3_end:
+0534   0342 78          	MOV A,B ;restore A
+0535   0343 E6 08       	ANI 008h
+0536   0345 CA 4E 03    	JZ unpack_level3_4
+0537   0348 CD AA 03    	CALL unpack_level4
+0538   034B C3 55 03    	JMP unpack_level3_4_end
+0539   034E             unpack_level3_4:
+0540   034E E5          	PUSH H
+0541   034F 21 08 00    	LXI H,008h
+0542   0352 19          	DAD D
+0543   0353 EB          	XCHG
+0544   0354 E1          	POP H
+0545   0355             unpack_level3_4_end:
+0546   0355 78          	MOV A,B ;restore A
+0547   0356 E6 10       	ANI 010h
+0548   0358 CA 61 03    	JZ unpack_level3_5
+0549   035B CD AA 03    	CALL unpack_level4
+0550   035E C3 68 03    	JMP unpack_level3_5_end
+0551   0361             unpack_level3_5:
+0552   0361 E5          	PUSH H
+0553   0362 21 08 00    	LXI H,008h
+0554   0365 19          	DAD D
+0555   0366 EB          	XCHG
+0556   0367 E1          	POP H
+0557   0368             unpack_level3_5_end:
+0558   0368 78          	MOV A,B ;restore A
+0559   0369 E6 20       	ANI 020h
+0560   036B CA 74 03    	JZ unpack_level3_6
+0561   036E CD AA 03    	CALL unpack_level4
+0562   0371 C3 7B 03    	JMP unpack_level3_6_end
+0563   0374             unpack_level3_6:
+0564   0374 E5          	PUSH H
+0565   0375 21 08 00    	LXI H,008h
+0566   0378 19          	DAD D
+0567   0379 EB          	XCHG
+0568   037A E1          	POP H
+0569   037B             unpack_level3_6_end:
+0570   037B 78          	MOV A,B ;restore A
+0571   037C E6 40       	ANI 040h
+0572   037E CA 87 03    	JZ unpack_level3_7
+0573   0381 CD AA 03    	CALL unpack_level4
+0574   0384 C3 8E 03    	JMP unpack_level3_7_end
+0575   0387             unpack_level3_7:
+0576   0387 E5          	PUSH H
+0577   0388 21 08 00    	LXI H,008h
+0578   038B 19          	DAD D
+0579   038C EB          	XCHG
+0580   038D E1          	POP H
+0581   038E             unpack_level3_7_end:
+0582   038E 78          	MOV A,B ;restore A
+0583   038F E6 80       	ANI 080h
+0584   0391 CA 9A 03    	JZ unpack_level3_8
+0585   0394 CD AA 03    	CALL unpack_level4
+0586   0397 C3 A1 03    	JMP unpack_level3_8_end
+0587   039A             unpack_level3_8:
+0588   039A E5          	PUSH H
+0589   039B 21 08 00    	LXI H,008h
+0590   039E 19          	DAD D
+0591   039F EB          	XCHG
+0592   03A0 E1          	POP H
+0593   03A1             unpack_level3_8_end:
+0594   03A1             	;end of line: add 11 bytes
+0595   03A1 E5          	PUSH H
+0596   03A2 21 0B 00    	LXI H,00Bh
+0597   03A5 19          	DAD D
+0598   03A6 EB          	XCHG
+0599   03A7 E1          	POP H
+0600   03A8             	;going back
+0601   03A8 C1          	POP B
+0602   03A9 C9          	RET
+0603   03AA             
+0604   03AA             unpack_level4:
+0605   03AA C5          	PUSH B
+0606   03AB 7E          	MOV A,M ;load byte into A
+0607   03AC 23          	INX H ;move to next byte
+0608   03AD 47          	MOV B,A ;save A
+0609   03AE E6 01       	ANI 001h
+0610   03B0 CA B6 03    	JZ unpack_level4_1
+0611   03B3 7E          	MOV A,M ;load byte into A
+0612   03B4 23          	INX H ;move to next byte
+0613   03B5 12          	STAX D
+0614   03B6             unpack_level4_1:
+0615   03B6 13          	INX D
+0616   03B7 78          	MOV A,B ;restore A
+0617   03B8 E6 02       	ANI 002h
+0618   03BA CA C0 03    	JZ unpack_level4_2
+0619   03BD 7E          	MOV A,M ;load byte into A
+0620   03BE 23          	INX H ;move to next byte
+0621   03BF 12          	STAX D
+0622   03C0             unpack_level4_2:
+0623   03C0 13          	INX D
+0624   03C1 78          	MOV A,B ;restore A
+0625   03C2 E6 04       	ANI 004h
+0626   03C4 CA CA 03    	JZ unpack_level4_3
+0627   03C7 7E          	MOV A,M ;load byte into A
+0628   03C8 23          	INX H ;move to next byte
+0629   03C9 12          	STAX D
+0630   03CA             unpack_level4_3:
+0631   03CA 13          	INX D
+0632   03CB 78          	MOV A,B ;restore A
+0633   03CC E6 08       	ANI 008h
+0634   03CE CA D4 03    	JZ unpack_level4_4
+0635   03D1 7E          	MOV A,M ;load byte into A
+0636   03D2 23          	INX H ;move to next byte
+0637   03D3 12          	STAX D
+0638   03D4             unpack_level4_4:
+0639   03D4 13          	INX D
+0640   03D5 78          	MOV A,B ;restore A
+0641   03D6 E6 10       	ANI 010h
+0642   03D8 CA DE 03    	JZ unpack_level4_5
+0643   03DB 7E          	MOV A,M ;load byte into A
+0644   03DC 23          	INX H ;move to next byte
+0645   03DD 12          	STAX D
+0646   03DE             unpack_level4_5:
+0647   03DE 13          	INX D
+0648   03DF 78          	MOV A,B ;restore A
+0649   03E0 E6 20       	ANI 020h
+0650   03E2 CA E8 03    	JZ unpack_level4_6
+0651   03E5 7E          	MOV A,M ;load byte into A
+0652   03E6 23          	INX H ;move to next byte
+0653   03E7 12          	STAX D
+0654   03E8             unpack_level4_6:
+0655   03E8 13          	INX D
+0656   03E9 78          	MOV A,B ;restore A
+0657   03EA E6 40       	ANI 040h
+0658   03EC CA F2 03    	JZ unpack_level4_7
+0659   03EF 7E          	MOV A,M ;load byte into A
+0660   03F0 23          	INX H ;move to next byte
+0661   03F1 12          	STAX D
+0662   03F2             unpack_level4_7:
+0663   03F2 13          	INX D
+0664   03F3 78          	MOV A,B ;restore A
+0665   03F4 E6 80       	ANI 080h
+0666   03F6 CA FC 03    	JZ unpack_level4_8
+0667   03F9 7E          	MOV A,M ;load byte into A
+0668   03FA 23          	INX H ;move to next byte
+0669   03FB 12          	STAX D
+0670   03FC             unpack_level4_8:
+0671   03FC 13          	INX D
+0672   03FD C1          	POP B
+0673   03FE C9          	RET
+0674   03FF             	
+0675   03FF             unpack_end:
+0676   03FF 00          	NOP
+0677   0400               
+0678   0400 C9            ret
+0679   0401               ; --- fs_init -----------------------------------------------------------------
+0680   0401             fs_init:
+0681   0401 22 DB 05        SHLD fs_cmdLine
+0682   0404 EB              XCHG
+0683   0405 22 DE 05        SHLD fs_selfName
+0684   0408 60              MOV H, B
+0685   0409 69              MOV L, C
+0686   040A 22 0F 04        SHLD fs_entry_n+1
+0687   040D               
+0688   040D C9            ret
+0689   040E               ; --- fs_entry -----------------------------------------------------------------
+0690   040E             fs_entry:
+0691   040E             fs_entry_n:
+0692   040E C3 00 00        JMP 0000h
+0693   0411               
+0694   0411 C9            ret
+0695   0412               ; --- fs_open -----------------------------------------------------------------
+0696   0412             fs_open:
+0697   0412 22 E6 05      shld fs_open_1
+0698   0415               ; 5 return fs_open0(name, O_OPEN);
+0699   0415 22 EB 05      shld fs_open0_1
+0700   0418 AF            xra a
+0701   0419 C3 A3 05      jmp fs_open0
+0702   041C C9            ret
+0703   041D               ; --- apogeyScreen3a -----------------------------------------------------------------
+0704   041D             apogeyScreen3a:
+0705   041D C5            push b
+0706   041E               ; 3 memset((uchar*)MEM_ADDR, 0, (HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+2); 
+0707   041E 21 FF C0      lxi h, 49407
+0708   0421 22 EE 05      shld memset_1
+0709   0424 AF            xra a
+0710   0425 32 F0 05      sta memset_2
+0711   0428 21 01 0F      lxi h, 3841
+0712   042B CD B2 05      call memset
+0713   042E               ; 4 for(v=(uchar*)(MEM_ADDR)-1, i=TOP_INVISIBLE; i; --i) 
+0714   042E 01 FE C0      lxi b, 49406
+0715   0431 3E 07         mvi a, 7
+0716   0433 32 E8 05      sta apogeyScreen3a_i
+0717   0436             l0:
+0718   0436               ; convertToConfition
+0719   0436 3A E8 05      lda apogeyScreen3a_i
+0720   0439 B7            ora a
+0721   043A CA 49 04      jz l1
+0722   043D               ; 5 v+=2, *v = 0xF1; —ложение BC с константой 2
+0723   043D 03            inx b
+0724   043E 03            inx b
+0725   043F 3E F1         mvi a, 241
+0726   0441 02            stax b
+0727   0442             l2:
+0728   0442 21 E8 05      lxi h, apogeyScreen3a_i
+0729   0445 35            dcr m
+0730   0446 C3 36 04      jmp l0
+0731   0449             l1:
+0732   0449               ; 6 if(FILL_EOL) 7 for(i = HEIGHT; i; --i) 
+0733   0449 3E 33         mvi a, 51
+0734   044B 32 E8 05      sta apogeyScreen3a_i
+0735   044E             l4:
+0736   044E               ; convertToConfition
+0737   044E 3A E8 05      lda apogeyScreen3a_i
+0738   0451 B7            ora a
+0739   0452 CA 65 04      jz l5
+0740   0455               ; 8 v += (BPL), *v = 0xF1; —ложение с BC
+0741   0455 21 4B 00      lxi h, 75
+0742   0458 09            dad b
+0743   0459 44            mov b, h
+0744   045A 4D            mov c, l
+0745   045B 3E F1         mvi a, 241
+0746   045D 02            stax b
+0747   045E             l6:
+0748   045E 21 E8 05      lxi h, apogeyScreen3a_i
+0749   0461 35            dcr m
+0750   0462 C3 4E 04      jmp l4
+0751   0465             l5:
+0752   0465               ; 9 ((uchar*)MEM_ADDR)[(HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+1] = 0xFF; 
+0753   0465 21 FF CF      lxi h, 53247
+0754   0468 36 FF         mvi m, 255
+0755   046A               ; 10 apogeyVideoMem = (uchar*)(MEM_ADDR) + (TOP_INVISIBLE)*2 + 9; 
+0756   046A 21 16 C1      lxi h, 49430
+0757   046D 22 F3 05      shld apogeyVideoMem
+0758   0470               ; 11 apogeyVideoBpl = (BPL); 
+0759   0470 3E 4B         mvi a, 75
+0760   0472 32 F5 05      sta apogeyVideoBpl
+0761   0475               ; 1 ((uchar*)0xEF00)
+0762   0475 21 01 EF      lxi h, 61185
+0763   0478 36 00         mvi m, 0
+0764   047A               ; 1 ((uchar*)0xEF00)
+0765   047A 2D            dcr l
+0766   047B 36 4D         mvi m, 77
+0767   047D               ; 1 ((uchar*)0xEF00)
+0768   047D 36 7F         mvi m, 127
+0769   047F               ; 1 ((uchar*)0xEF00)
+0770   047F 36 33         mvi m, 51
+0771   0481               ; 1 ((uchar*)0xEF00)
+0772   0481 36 53         mvi m, 83
+0773   0483               ; 1 ((uchar*)0xEF00)
+0774   0483 2C            inr l
+0775   0484 36 23         mvi m, 35
+0776   0486               ; 7 while((VG75[1] & 0x20) == 0); 
+0777   0486             l13:
+0778   0486 3A 01 EF      lda 61185
+0779   0489 E6 20         ani 32
+0780   048B C2 91 04      jnz l14
+0781   048E C3 86 04      jmp l13
+0782   0491             l14:
+0783   0491               ; 8 while((VG75[1] & 0x20) == 0); 
+0784   0491             l15:
+0785   0491 3A 01 EF      lda 61185
+0786   0494 E6 20         ani 32
+0787   0496 C2 9C 04      jnz l16
+0788   0499 C3 91 04      jmp l15
+0789   049C             l16:
+0790   049C               ; 1 ((uchar*)0xF000)
+0791   049C 21 08 F0      lxi h, 61448
+0792   049F 36 80         mvi m, 128
+0793   04A1               ; 1 ((uchar*)0xF000)
+0794   04A1 2E 04         mvi l, 4
+0795   04A3 36 FF         mvi m, 255
+0796   04A5               ; 1 ((uchar*)0xF000)
+0797   04A5 36 C0         mvi m, 192
+0798   04A7               ; 1 ((uchar*)0xF000)
+0799   04A7 2C            inr l
+0800   04A8 36 00         mvi m, 0
+0801   04AA               ; 1 ((uchar*)0xF000)
+0802   04AA 36 4F         mvi m, 79
+0803   04AC               ; 1 ((uchar*)0xF000)
+0804   04AC 2E 08         mvi l, 8
+0805   04AE 36 A4         mvi m, 164
+0806   04B0               ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 
+0807   04B0 FB           ei 
+0808   04B1               ; 15 asm { di } 
+0809   04B1 C1            pop b
+0810   04B2 C9            ret
+0811   04B3               ; --- apogeyScreen2a -----------------------------------------------------------------
+0812   04B3             apogeyScreen2a:
+0813   04B3 C5            push b
+0814   04B4               ; 3 memset((uchar*)MEM_ADDR, 0, (HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+2); 
+0815   04B4 21 D0 E1      lxi h, 57808
+0816   04B7 22 EE 05      shld memset_1
+0817   04BA AF            xra a
+0818   04BB 32 F0 05      sta memset_2
+0819   04BE 21 1D 09      lxi h, 2333
+0820   04C1 CD B2 05      call memset
+0821   04C4               ; 4 for(v=(uchar*)(MEM_ADDR)-1, i=TOP_INVISIBLE; i; --i) 
+0822   04C4 01 CF E1      lxi b, 57807
+0823   04C7 3E 03         mvi a, 3
+0824   04C9 32 E9 05      sta apogeyScreen2a_i
+0825   04CC             l19:
+0826   04CC               ; convertToConfition
+0827   04CC 3A E9 05      lda apogeyScreen2a_i
+0828   04CF B7            ora a
+0829   04D0 CA DF 04      jz l20
+0830   04D3               ; 5 v+=2, *v = 0xF1; —ложение BC с константой 2
+0831   04D3 03            inx b
+0832   04D4 03            inx b
+0833   04D5 3E F1         mvi a, 241
+0834   04D7 02            stax b
+0835   04D8             l21:
+0836   04D8 21 E9 05      lxi h, apogeyScreen2a_i
+0837   04DB 35            dcr m
+0838   04DC C3 CC 04      jmp l19
+0839   04DF             l20:
+0840   04DF               ; 6 if(FILL_EOL) 7 for(i = HEIGHT; i; --i) 
+0841   04DF 3E 1F         mvi a, 31
+0842   04E1 32 E9 05      sta apogeyScreen2a_i
+0843   04E4             l23:
+0844   04E4               ; convertToConfition
+0845   04E4 3A E9 05      lda apogeyScreen2a_i
+0846   04E7 B7            ora a
+0847   04E8 CA FB 04      jz l24
+0848   04EB               ; 8 v += (BPL), *v = 0xF1; —ложение с BC
+0849   04EB 21 4B 00      lxi h, 75
+0850   04EE 09            dad b
+0851   04EF 44            mov b, h
+0852   04F0 4D            mov c, l
+0853   04F1 3E F1         mvi a, 241
+0854   04F3 02            stax b
+0855   04F4             l25:
+0856   04F4 21 E9 05      lxi h, apogeyScreen2a_i
+0857   04F7 35            dcr m
+0858   04F8 C3 E4 04      jmp l23
+0859   04FB             l24:
+0860   04FB               ; 9 ((uchar*)MEM_ADDR)[(HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+1] = 0xFF; 
+0861   04FB 21 EC EA      lxi h, 60140
+0862   04FE 36 FF         mvi m, 255
+0863   0500               ; 10 apogeyVideoMem = (uchar*)(MEM_ADDR) + (TOP_INVISIBLE)*2 + 9; 
+0864   0500 21 DF E1      lxi h, 57823
+0865   0503 22 F3 05      shld apogeyVideoMem
+0866   0506               ; 11 apogeyVideoBpl = (BPL); 
+0867   0506 3E 4B         mvi a, 75
+0868   0508 32 F5 05      sta apogeyVideoBpl
+0869   050B               ; 1 ((uchar*)0xEF00)
+0870   050B 21 01 EF      lxi h, 61185
+0871   050E 36 00         mvi m, 0
+0872   0510               ; 1 ((uchar*)0xEF00)
+0873   0510 2D            dcr l
+0874   0511 36 4D         mvi m, 77
+0875   0513               ; 1 ((uchar*)0xEF00)
+0876   0513 36 64         mvi m, 100
+0877   0515               ; 1 ((uchar*)0xEF00)
+0878   0515 36 77         mvi m, 119
+0879   0517               ; 1 ((uchar*)0xEF00)
+0880   0517 36 53         mvi m, 83
+0881   0519               ; 1 ((uchar*)0xEF00)
+0882   0519 2C            inr l
+0883   051A 36 23         mvi m, 35
+0884   051C               ; 7 while((VG75[1] & 0x20) == 0); 
+0885   051C             l32:
+0886   051C 3A 01 EF      lda 61185
+0887   051F E6 20         ani 32
+0888   0521 C2 27 05      jnz l33
+0889   0524 C3 1C 05      jmp l32
+0890   0527             l33:
+0891   0527               ; 8 while((VG75[1] & 0x20) == 0); 
+0892   0527             l34:
+0893   0527 3A 01 EF      lda 61185
+0894   052A E6 20         ani 32
+0895   052C C2 32 05      jnz l35
+0896   052F C3 27 05      jmp l34
+0897   0532             l35:
+0898   0532               ; 1 ((uchar*)0xF000)
+0899   0532 21 08 F0      lxi h, 61448
+0900   0535 36 80         mvi m, 128
+0901   0537               ; 1 ((uchar*)0xF000)
+0902   0537 2E 04         mvi l, 4
+0903   0539 36 D0         mvi m, 208
+0904   053B               ; 1 ((uchar*)0xF000)
+0905   053B 36 E1         mvi m, 225
+0906   053D               ; 1 ((uchar*)0xF000)
+0907   053D 2C            inr l
+0908   053E 36 1C         mvi m, 28
+0909   0540               ; 1 ((uchar*)0xF000)
+0910   0540 36 49         mvi m, 73
+0911   0542               ; 1 ((uchar*)0xF000)
+0912   0542 2E 08         mvi l, 8
+0913   0544 36 A4         mvi m, 164
+0914   0546               ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 15 asm { di } 
+0915   0546 F3           di 
+0916   0547 C1            pop b
+0917   0548 C9            ret
+0918   0549               ; --- apogeyScreen0 -----------------------------------------------------------------
+0919   0549             apogeyScreen0:
+0920   0549 C5            push b
+0921   054A               ; 3 memset((uchar*)(MEM_ADDR), 0, (FULL_HEIGHT)*(BPL)); 
+0922   054A 21 D0 E1      lxi h, 57808
+0923   054D 22 EE 05      shld memset_1
+0924   0550 AF            xra a
+0925   0551 32 F0 05      sta memset_2
+0926   0554 21 24 09      lxi h, 2340
+0927   0557 CD B2 05      call memset
+0928   055A               ; 4 if(FILL_EOL) { 5 v = (uchar*)(MEM_ADDR)-1; 9 apogeyVideoMem = (uchar*)(MEM_ADDR) + (TOP_INVISIBLE)*(BPL) + ((HIDDEN_ATTRIB) ? 9 : 8); 
+0929   055A 21 C2 E2      lxi h, 58050
+0930   055D 22 F3 05      shld apogeyVideoMem
+0931   0560               ; 10 apogeyVideoBpl = (BPL); 
+0932   0560 3E 4E         mvi a, 78
+0933   0562 32 F5 05      sta apogeyVideoBpl
+0934   0565               ; 1 ((uchar*)0xEF00)
+0935   0565 21 01 EF      lxi h, 61185
+0936   0568 36 00         mvi m, 0
+0937   056A               ; 1 ((uchar*)0xEF00)
+0938   056A 2D            dcr l
+0939   056B 36 4D         mvi m, 77
+0940   056D               ; 1 ((uchar*)0xEF00)
+0941   056D 36 1D         mvi m, 29
+0942   056F               ; 1 ((uchar*)0xEF00)
+0943   056F 36 99         mvi m, 153
+0944   0571               ; 1 ((uchar*)0xEF00)
+0945   0571 36 D3         mvi m, 211
+0946   0573               ; 1 ((uchar*)0xEF00)
+0947   0573 2C            inr l
+0948   0574 36 23         mvi m, 35
+0949   0576               ; 7 while((VG75[1] & 0x20) == 0); 
+0950   0576             l50:
+0951   0576 3A 01 EF      lda 61185
+0952   0579 E6 20         ani 32
+0953   057B C2 81 05      jnz l51
+0954   057E C3 76 05      jmp l50
+0955   0581             l51:
+0956   0581               ; 8 while((VG75[1] & 0x20) == 0); 
+0957   0581             l52:
+0958   0581 3A 01 EF      lda 61185
+0959   0584 E6 20         ani 32
+0960   0586 C2 8C 05      jnz l53
+0961   0589 C3 81 05      jmp l52
+0962   058C             l53:
+0963   058C               ; 1 ((uchar*)0xF000)
+0964   058C 21 08 F0      lxi h, 61448
+0965   058F 36 80         mvi m, 128
+0966   0591               ; 1 ((uchar*)0xF000)
+0967   0591 2E 04         mvi l, 4
+0968   0593 36 D0         mvi m, 208
+0969   0595               ; 1 ((uchar*)0xF000)
+0970   0595 36 E1         mvi m, 225
+0971   0597               ; 1 ((uchar*)0xF000)
+0972   0597 2C            inr l
+0973   0598 36 23         mvi m, 35
+0974   059A               ; 1 ((uchar*)0xF000)
+0975   059A 36 49         mvi m, 73
+0976   059C               ; 1 ((uchar*)0xF000)
+0977   059C 2E 08         mvi l, 8
+0978   059E 36 A4         mvi m, 164
+0979   05A0               ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 15 asm { di } 
+0980   05A0 F3           di 
+0981   05A1 C1            pop b
+0982   05A2 C9            ret
+0983   05A3               ; --- fs_open0 -----------------------------------------------------------------
+0984   05A3             fs_open0:
+0985   05A3 32 ED 05      sta fs_open0_2
+0986   05A6               ; 5 asm {      
+0987   05A6                   
+0988   05A6 C5              PUSH B
+0989   05A7                 ; a = fs_open0_2
+0990   05A7 57              MOV  D, A 
+0991   05A8 2A EB 05        LHLD fs_open0_1
+0992   05AB 3E 02           MVI  A, 2
+0993   05AD CD 0E 04        CALL fs_entry
+0994   05B0 C1              POP  B
+0995   05B1               
+0996   05B1 C9            ret
+0997   05B2               ; --- memset -----------------------------------------------------------------
+0998   05B2             memset:
+0999   05B2 22 F1 05      shld memset_3
+1000   05B5               ; 2 asm {
+1001   05B5 C5              push b
+1002   05B6 3A F0 05        lda memset_2
+1003   05B9 EB              xchg
+1004   05BA 2A EE 05        lhld memset_1
+1005   05BD EB              xchg
+1006   05BE 01 FF FF        lxi b, -1    
+1007   05C1             memset_l1:
+1008   05C1 09              dad b
+1009   05C2 D2 CA 05        jnc memset_l2
+1010   05C5 12              stax d
+1011   05C6 13              inx d
+1012   05C7 C3 C1 05        jmp memset_l1
+1013   05CA             memset_l2:
+1014   05CA C1              pop b
+1015   05CB               
+1016   05CB C9            ret
+1017   05CC             main_i:
+1018   05CC              .ds 2
+1019   05CE             main_j:
+1020   05CE              .ds 2
+1021   05D0             main_c:
+1022   05D0              .ds 1
+1023   05D1             main_FifoReadPointer:
+1024   05D1              .ds 2
+1025   05D3             main_FifoWritePointer:
+1026   05D3              .ds 2
+1027   05D5             main_iNumberOfFrames:
+1028   05D5              .ds 2
+1029   05D7             main_iFrameCounter:
+1030   05D7              .ds 2
+1031   05D9             main_Machine_Type:
+1032   05D9              .ds 1
+1033   05DA             main_Screen_Type:
+1034   05DA              .ds 1
+1035   05DB             fs_cmdLine:
+1036   05DB DD 05        .dw $+2
+1037   05DD              .ds 1
+1038   05DE             fs_selfName:
+1039   05DE E0 05        .dw $+2
+1040   05E0              .ds 1
+1041   05E1             fs_low:
+1042   05E1              .ds 2
+1043   05E3             fs_high:
+1044   05E3              .ds 2
+1045   05E5             fs_addr:
+1046   05E5              .ds 1
+1047   05E6             fs_open_1:
+1048   05E6              .ds 2
+1049   05E8             apogeyScreen3a_i:
+1050   05E8              .ds 1
+1051   05E9             apogeyScreen2a_i:
+1052   05E9              .ds 1
+1053   05EA             apogeyScreen0_i:
+1054   05EA              .ds 1
+1055   05EB             fs_open0_1:
+1056   05EB              .ds 2
+1057   05ED             fs_open0_2:
+1058   05ED              .ds 1
+1059   05EE             memset_1:
+1060   05EE              .ds 2
+1061   05F0             memset_2:
+1062   05F0              .ds 1
+1063   05F1             memset_3:
+1064   05F1              .ds 2
+1065   05F3             apogeyVideoMem:
+1066   05F3 C2 E2        .dw 58050
+1067   05F5             
+1068   05F5             apogeyVideoBpl:
+1069   05F5 4E           .db 78
+1070   05F6             
+1071   05F6             string0:
+1072   05F6 56 49 44 45  .db 86,73,68,69,79,47,65,80,80,76,69,46,65,80,86,0
+1072   05FA 4F 2F 41 50 
+1072   05FE 50 4C 45 2E 
+1072   0602 41 50 56 00 
+1073   0606               .end
 tasm: Number of errors = 0
