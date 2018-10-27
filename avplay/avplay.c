@@ -9,6 +9,7 @@ void main() {
   char c;
   void * FifoReadPointer;
   void * FifoWritePointer;
+  void * ScreenStartPointer;
   int iNumberOfFrames;
   int iFrameCounter;
   char Machine_Type;
@@ -92,11 +93,15 @@ Machine_Test_Done:
 	CPI 0h
 	JNZ SetScreen128x60
 SetScreen192x102:
+	LXI H, 0C113h
+	SHLD main_ScreenStartPointer
   }
 	apogeyScreen3A();
   asm {
 	JMP SetScreenDone
 SetScreen128x60:
+	LXI H, 0E1DAh
+	SHLD main_ScreenStartPointer
   }
 	apogeyScreen2A();
   asm
@@ -243,15 +248,9 @@ Fifo_Read_Copy_Loop:
 	CMP C
 	JNZ Fifo_Read_Copy_Loop
 	;copy done, now processing frame as-is
-	;we should init DE before calling unpack, this is screen-dependent
-	LDA main_Screen_Type
-	CPI 01h
-	JZ Fifo_Read_Screen_Type_1
-	LXI D, 0C113h ;ScreenStart	
-	JMP Fifo_Read_Screen_Type_Done
-Fifo_Read_Screen_Type_1:	
-	LXI D, 0E1DAh ;ScreenStart
-Fifo_Read_Screen_Type_Done:
+	;we should init DE and HL before calling unpack
+	LHLD main_ScreenStartPointer
+	XCHG
 	LHLD main_FifoReadPointer
 	CALL unpack_btree1
 	;now move read pointer
@@ -271,15 +270,9 @@ Fifo_Read_Screen_Type_Done:
 	
 Fifo_Read_Do2:	
 	;non-wrapped unpack
-	;we should init DE before calling unpack, this is screen-dependent
-	LDA main_Screen_Type
-	CPI 01h
-	JZ Fifo_Read2_Screen_Type_1
-	LXI D, 0C113h ;ScreenStart	
-	JMP Fifo_Read2_Screen_Type_Done
-Fifo_Read2_Screen_Type_1:	
-	LXI D, 0E1DAh ;ScreenStart
-Fifo_Read2_Screen_Type_Done:
+	;we should init DE before calling unpack
+	LHLD main_ScreenStartPointer
+	XCHG
 	LHLD main_FifoReadPointer
 	CALL unpack_btree1
 	;now move read pointer

@@ -45,13 +45,13 @@ Machine_Test_Not_Radio:
 	  JMP 0F875h ;jump to monitor
 Machine_Test_Done:
   
-  ; 65 asm {
+  ; 66 asm {
      MVI  A, 1		; Версия контроллера
      LXI  B, 0DE17h; BiosEntry  ; Точка входа SD BIOS
      LXI  D, 0DBF3h; SELF_NAME  ; Собственное имя
      LXI  H, 0DCF3h; CMD_LINE   ; Командная строка
   
-  ; 72 fs_init();
+  ; 73 fs_init();
   call fs_init
   ; 1 ((uchar*)0xEF00)
   lxi h, 61185
@@ -61,10 +61,10 @@ Machine_Test_Done:
   mvi m, 255
   ; 1 ((uchar*)0xEF00)
   mvi m, 255
-  ; 79 fs_open("VIDEO/APPLE.APV");
+  ; 80 fs_open("VIDEO/APPLE.APV");
   lxi h, string0
   call fs_open
-  ; 82 asm{
+  ; 83 asm{
 	LXI D, 04000h
 	LXI H, 00100h ; header 256 bytes
     MVI  A, 004h;read command
@@ -77,25 +77,29 @@ Machine_Test_Done:
 	CPI 0h
 	JNZ SetScreen128x60
 SetScreen192x102:
+	LXI H, 0C113h
+	SHLD main_ScreenStartPointer
   
-  ; 96 apogeyScreen3A();
+  ; 99 apogeyScreen3A();
   call apogeyScreen3a
-  ; 97 asm {
+  ; 100 asm {
 	JMP SetScreenDone
 SetScreen128x60:
+	LXI H, 0E1DAh
+	SHLD main_ScreenStartPointer
   
-  ; 101 apogeyScreen2A();
+  ; 106 apogeyScreen2A();
   call apogeyScreen2a
-  ; 102 asm
+  ; 107 asm
 SetScreenDone:
 	
   
-  ; 109 asm{
+  ; 114 asm{
 	  LXI H, 04000h
 	  SHLD main_FifoReadPointer
 	  SHLD main_FifoWritePointer
   
-  ; 116 asm{
+  ; 121 asm{
 	LHLD main_FifoWritePointer
 	XCHG
 	LXI H, 03000h ; размер передачи 12k
@@ -105,10 +109,10 @@ SetScreenDone:
 	SHLD main_FifoWritePointer
 	;DI ;for debug
   
-  ; 127 iFrameCounter = iNumberOfFrames;
+  ; 132 iFrameCounter = iNumberOfFrames;
   lhld main_iNumberOfFrames
   shld main_iFrameCounter
-  ; 129 asm{
+  ; 134 asm{
 Main_Loop_Start:
 	LHLD main_iFrameCounter
 	XRA A ; A=0
@@ -225,15 +229,9 @@ Fifo_Read_Copy_Loop:
 	CMP C
 	JNZ Fifo_Read_Copy_Loop
 	;copy done, now processing frame as-is
-	;we should init DE before calling unpack, this is screen-dependent
-	LDA main_Screen_Type
-	CPI 01h
-	JZ Fifo_Read_Screen_Type_1
-	LXI D, 0C113h ;ScreenStart	
-	JMP Fifo_Read_Screen_Type_Done
-Fifo_Read_Screen_Type_1:	
-	LXI D, 0E1DAh ;ScreenStart
-Fifo_Read_Screen_Type_Done:
+	;we should init DE and HL before calling unpack
+	LHLD main_ScreenStartPointer
+	XCHG
 	LHLD main_FifoReadPointer
 	CALL unpack_btree1
 	;now move read pointer
@@ -253,15 +251,9 @@ Fifo_Read_Screen_Type_Done:
 	
 Fifo_Read_Do2:	
 	;non-wrapped unpack
-	;we should init DE before calling unpack, this is screen-dependent
-	LDA main_Screen_Type
-	CPI 01h
-	JZ Fifo_Read2_Screen_Type_1
-	LXI D, 0C113h ;ScreenStart	
-	JMP Fifo_Read2_Screen_Type_Done
-Fifo_Read2_Screen_Type_1:	
-	LXI D, 0E1DAh ;ScreenStart
-Fifo_Read2_Screen_Type_Done:
+	;we should init DE before calling unpack
+	LHLD main_ScreenStartPointer
+	XCHG
 	LHLD main_FifoReadPointer
 	CALL unpack_btree1
 	;now move read pointer
@@ -278,12 +270,12 @@ Fifo_Read2_Screen_Type_Done:
 
 Do_Exit:
   
-  ; 300 apogeyScreen0();
+  ; 293 apogeyScreen0();
   call apogeyScreen0
-  ; 301 asm {
+  ; 294 asm {
 		JMP 0F875h ;jump to monitor
 	
-  ; 305 asm{
+  ; 298 asm{
 str_Unknown_Machine:	.db "UNKNOWN MACHINE",0
 	
   ret
@@ -1023,6 +1015,8 @@ main_c:
 main_FifoReadPointer:
  .ds 2
 main_FifoWritePointer:
+ .ds 2
+main_ScreenStartPointer:
  .ds 2
 main_iNumberOfFrames:
  .ds 2
