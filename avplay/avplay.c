@@ -35,6 +35,19 @@ void main() {
 	  JNZ Machine_Test_Not_Apogey
 	  MVI A,00
 	  STA main_Machine_Type
+	  ;apogey-specific init
+      MVI  A, 1		; Версия контроллера
+      LXI  B, 0DE17h; BiosEntry  ; Точка входа SD BIOS
+      LXI  D, 0DBF3h; SELF_NAME  ; Собственное имя
+      LXI  H, 0DCF3h; CMD_LINE   ; Командная строка	 
+  }	  
+	  fs_init();
+asm {
+	  ;FIFO from 4000 to BFFF - 32 KB total, ~8 full frames / ~80 packed frames
+	  LXI H, 04000h
+	  SHLD main_FifoReadPointer
+	  SHLD main_FifoWritePointer
+  	  ;apogey-specific init done
 	  JMP Machine_Test_Done
 Machine_Test_Not_Apogey:
 	  LXI  H, 0FF5Bh
@@ -55,6 +68,19 @@ Machine_Test_Not_Apogey:
 	  JNZ Machine_Test_Not_Radio
 	  MVI A,01
 	  STA main_Machine_Type
+	  ;radio-specific init
+      MVI  A, 1		; Версия контроллера
+      LXI  B, 0DE17h; BiosEntry  ; Точка входа SD BIOS
+      LXI  D, 0DBF3h; SELF_NAME  ; Собственное имя
+      LXI  H, 0DCF3h; CMD_LINE   ; Командная строка	  
+  }	  
+	  fs_init();
+asm {
+	  ;FIFO from 4000 to 7FFF - 16 KB total, ~8 full frames / ~50 packed frames
+	  LXI H, 04000h
+	  SHLD main_FifoReadPointer
+	  SHLD main_FifoWritePointer
+  	  ;radio-specific init done
 	  JMP Machine_Test_Done
 Machine_Test_Not_Radio:
 	  LXI H, str_Unknown_Machine
@@ -64,13 +90,8 @@ Machine_Test_Done:
   }
 
   asm {
-     MVI  A, 1		; Версия контроллера
-     LXI  B, 0DE17h; BiosEntry  ; Точка входа SD BIOS
-     LXI  D, 0DBF3h; SELF_NAME  ; Собственное имя
-     LXI  H, 0DCF3h; CMD_LINE   ; Командная строка
+
   }
-  
-  fs_init();
     
   // cкрываем курсор       
   VG75[1] = 0x80;
@@ -109,26 +130,18 @@ SetScreen128x60:
 SetScreenDone:
 	
   }	  
-
-  //FIFO from 4000 to BFFF - 32 KB total, 8 full frames / 80 packed frames
-asm{
-	  LXI H, 04000h
-	  SHLD main_FifoReadPointer
+  
+//PRE-READ
+  asm {
+	  LHLD main_FifoWritePointer
+	  XCHG
+	  LXI H, 03000h ; размер передачи 12k
+      MVI  A, 004h;read command
+	  CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
+	  LXI H, 07000h
 	  SHLD main_FifoWritePointer
   }
-	  
-//PRE-READ
-asm{
-	LHLD main_FifoWritePointer
-	XCHG
-	LXI H, 03000h ; размер передачи 12k
-    MVI  A, 004h;read command
-	CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
-	LXI H, 07000h
-	SHLD main_FifoWritePointer
-	;DI ;for debug
-  }	  
-  
+
   iFrameCounter = iNumberOfFrames;
   
   asm{

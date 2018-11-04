@@ -18,6 +18,20 @@ main:
 	  JNZ Machine_Test_Not_Apogey
 	  MVI A,00
 	  STA main_Machine_Type
+	  ;apogey-specific init
+      MVI  A, 1		; Версия контроллера
+      LXI  B, 0DE17h; BiosEntry  ; Точка входа SD BIOS
+      LXI  D, 0DBF3h; SELF_NAME  ; Собственное имя
+      LXI  H, 0DCF3h; CMD_LINE   ; Командная строка	 
+  
+  ; 44 fs_init();
+  call fs_init
+  ; 45 asm {
+	  ;FIFO from 4000 to BFFF - 32 KB total, ~8 full frames / ~80 packed frames
+	  LXI H, 04000h
+	  SHLD main_FifoReadPointer
+	  SHLD main_FifoWritePointer
+  	  ;apogey-specific init done
 	  JMP Machine_Test_Done
 Machine_Test_Not_Apogey:
 	  LXI  H, 0FF5Bh
@@ -38,6 +52,20 @@ Machine_Test_Not_Apogey:
 	  JNZ Machine_Test_Not_Radio
 	  MVI A,01
 	  STA main_Machine_Type
+	  ;radio-specific init
+      MVI  A, 1		; Версия контроллера
+      LXI  B, 0DE17h; BiosEntry  ; Точка входа SD BIOS
+      LXI  D, 0DBF3h; SELF_NAME  ; Собственное имя
+      LXI  H, 0DCF3h; CMD_LINE   ; Командная строка	  
+  
+  ; 77 fs_init();
+  call fs_init
+  ; 78 asm {
+	  ;FIFO from 4000 to 7FFF - 16 KB total, ~8 full frames / ~50 packed frames
+	  LXI H, 04000h
+	  SHLD main_FifoReadPointer
+	  SHLD main_FifoWritePointer
+  	  ;radio-specific init done
 	  JMP Machine_Test_Done
 Machine_Test_Not_Radio:
 	  LXI H, str_Unknown_Machine
@@ -45,14 +73,9 @@ Machine_Test_Not_Radio:
 	  JMP 0F875h ;jump to monitor
 Machine_Test_Done:
   
-  ; 66 asm {
-     MVI  A, 1		; Версия контроллера
-     LXI  B, 0DE17h; BiosEntry  ; Точка входа SD BIOS
-     LXI  D, 0DBF3h; SELF_NAME  ; Собственное имя
-     LXI  H, 0DCF3h; CMD_LINE   ; Командная строка
+  ; 92 asm {
+
   
-  ; 73 fs_init();
-  call fs_init
   ; 1 ((uchar*)0xEF00)
   lxi h, 61185
   mvi m, 128
@@ -61,10 +84,10 @@ Machine_Test_Done:
   mvi m, 255
   ; 1 ((uchar*)0xEF00)
   mvi m, 255
-  ; 80 fs_open("VIDEO/APPLE.APV");
+  ; 101 fs_open("VIDEO/APPLE.APV");
   lxi h, string0
   call fs_open
-  ; 83 asm{
+  ; 104 asm{
 	LXI D, 04000h
 	LXI H, 00100h ; header 256 bytes
     MVI  A, 004h;read command
@@ -80,39 +103,33 @@ SetScreen192x102:
 	LXI H, 0C113h
 	SHLD main_ScreenStartPointer
   
-  ; 99 apogeyScreen3A();
+  ; 120 apogeyScreen3A();
   call apogeyScreen3a
-  ; 100 asm {
+  ; 121 asm {
 	JMP SetScreenDone
 SetScreen128x60:
 	LXI H, 0E1DAh
 	SHLD main_ScreenStartPointer
   
-  ; 106 apogeyScreen2A();
+  ; 127 apogeyScreen2A();
   call apogeyScreen2a
-  ; 107 asm
+  ; 128 asm
 SetScreenDone:
 	
   
-  ; 114 asm{
-	  LXI H, 04000h
-	  SHLD main_FifoReadPointer
+  ; 135 asm {
+	  LHLD main_FifoWritePointer
+	  XCHG
+	  LXI H, 03000h ; размер передачи 12k
+      MVI  A, 004h;read command
+	  CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
+	  LXI H, 07000h
 	  SHLD main_FifoWritePointer
   
-  ; 121 asm{
-	LHLD main_FifoWritePointer
-	XCHG
-	LXI H, 03000h ; размер передачи 12k
-    MVI  A, 004h;read command
-	CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
-	LXI H, 07000h
-	SHLD main_FifoWritePointer
-	;DI ;for debug
-  
-  ; 132 iFrameCounter = iNumberOfFrames;
+  ; 145 iFrameCounter = iNumberOfFrames;
   lhld main_iNumberOfFrames
   shld main_iFrameCounter
-  ; 134 asm{
+  ; 147 asm{
 Main_Loop_Start:
 	LHLD main_iFrameCounter
 	XRA A ; A=0
@@ -270,12 +287,12 @@ Fifo_Read_Do2:
 
 Do_Exit:
   
-  ; 293 apogeyScreen0();
+  ; 306 apogeyScreen0();
   call apogeyScreen0
-  ; 294 asm {
+  ; 307 asm {
 		JMP 0F875h ;jump to monitor
 	
-  ; 298 asm{
+  ; 311 asm{
 str_Unknown_Machine:	.db "UNKNOWN MACHINE",0
 	
   ret
