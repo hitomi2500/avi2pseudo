@@ -14,6 +14,8 @@ void main() {
   int iFrameCounter;
   char Machine_Type;
   char Screen_Type;
+  char Fifo_Write_Threshold_1;
+  char Fifo_Write_Threshold_2;
   
   //checking machine type
   asm{
@@ -47,6 +49,10 @@ asm {
 	  LXI H, 04000h
 	  SHLD main_FifoReadPointer
 	  SHLD main_FifoWritePointer
+	  MVI A, 07Ch
+	  STA main_Fifo_Write_Threshold_1
+	  MVI A, 045h
+	  STA main_Fifo_Write_Threshold_2
   	  ;apogey-specific init done
 	  JMP Machine_Test_Done
 Machine_Test_Not_Apogey:
@@ -70,14 +76,14 @@ Machine_Test_Not_Apogey:
 	  STA main_Machine_Type
 	  ;radio-specific init
       MVI  A, 1		; Версия контроллера
-      LXI  B, 0DE17h; BiosEntry  ; Точка входа SD BIOS
-      LXI  D, 0DBF3h; SELF_NAME  ; Собственное имя
-      LXI  H, 0DCF3h; CMD_LINE   ; Командная строка	  
+      LXI  B, 07417h; BiosEntry  ; Точка входа SD BIOS
+      LXI  D, 071F3h; SELF_NAME  ; Собственное имя
+      LXI  H, 072F3h; CMD_LINE   ; Командная строка	  
   }	  
 	  fs_init();
 asm {
-	  ;FIFO from 4000 to 7FFF - 16 KB total, ~8 full frames / ~50 packed frames
-	  LXI H, 04000h
+	  ;FIFO from 2000 to 5FFF - 16 KB total, ~8 full frames / ~50 packed frames
+	  LXI H, 02000h
 	  SHLD main_FifoReadPointer
 	  SHLD main_FifoWritePointer
   	  ;radio-specific init done
@@ -102,13 +108,12 @@ Machine_Test_Done:
   
   //read header
   asm{
-	LXI D, 04000h
+	LHLD main_FifoReadPointer
+	XCHG
 	LXI H, 00100h ; header 256 bytes
     MVI  A, 004h;read command
 	CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
-	LHLD 04004h 
-	SHLD main_iNumberOfFrames
-	LHLD 04000h
+	LHLD main_FifoReadPointer
 	MOV A,H
 	STA main_Screen_Type
 	CPI 0h
@@ -128,7 +133,14 @@ SetScreen128x60:
   asm
   {
 SetScreenDone:
-	
+	LHLD main_FifoReadPointer
+	LXI D,4
+	DAD D
+	MOV E,M
+	INX H
+	MOV D,M
+	XCHG
+	SHLD main_iNumberOfFrames
   }	  
   
 //PRE-READ
@@ -138,7 +150,9 @@ SetScreenDone:
 	  LXI H, 03000h ; размер передачи 12k
       MVI  A, 004h;read command
 	  CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
-	  LXI H, 07000h
+	  LHLD main_FifoWritePointer
+	  LXI D, 03000h
+	  DAD D
 	  SHLD main_FifoWritePointer
   }
 
@@ -157,8 +171,8 @@ Fifo_Write_Start:
 	; first check if we have enough free space in fifo, granularity is 1024 bytes
 	; fifo is almost full when either (write!=7C00 and read-write>0 and read-write-8 < 0), or ( write=7C00 and (read> 7C00 or read < 4400) )
 	LHLD main_FifoWritePointer
-	MOV A,H
-	CPI 07Ch
+	LDA main_Fifo_Write_Threshold_1
+	CMP H
 	JZ Fifo_Write_Start2
 	;not end-buffer case, check read-write>0
 	LHLD main_FifoReadPointer

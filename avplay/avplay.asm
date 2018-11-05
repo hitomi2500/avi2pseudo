@@ -24,13 +24,17 @@ main:
       LXI  D, 0DBF3h; SELF_NAME  ; Собственное имя
       LXI  H, 0DCF3h; CMD_LINE   ; Командная строка	 
   
-  ; 44 fs_init();
+  ; 46 fs_init();
   call fs_init
-  ; 45 asm {
+  ; 47 asm {
 	  ;FIFO from 4000 to BFFF - 32 KB total, ~8 full frames / ~80 packed frames
 	  LXI H, 04000h
 	  SHLD main_FifoReadPointer
 	  SHLD main_FifoWritePointer
+	  MVI A, 07Ch
+	  STA main_Fifo_Write_Threshold_1
+	  MVI A, 045h
+	  STA main_Fifo_Write_Threshold_2
   	  ;apogey-specific init done
 	  JMP Machine_Test_Done
 Machine_Test_Not_Apogey:
@@ -54,15 +58,15 @@ Machine_Test_Not_Apogey:
 	  STA main_Machine_Type
 	  ;radio-specific init
       MVI  A, 1		; Версия контроллера
-      LXI  B, 0DE17h; BiosEntry  ; Точка входа SD BIOS
-      LXI  D, 0DBF3h; SELF_NAME  ; Собственное имя
-      LXI  H, 0DCF3h; CMD_LINE   ; Командная строка	  
+      LXI  B, 07417h; BiosEntry  ; Точка входа SD BIOS
+      LXI  D, 071F3h; SELF_NAME  ; Собственное имя
+      LXI  H, 072F3h; CMD_LINE   ; Командная строка	  
   
-  ; 77 fs_init();
+  ; 83 fs_init();
   call fs_init
-  ; 78 asm {
-	  ;FIFO from 4000 to 7FFF - 16 KB total, ~8 full frames / ~50 packed frames
-	  LXI H, 04000h
+  ; 84 asm {
+	  ;FIFO from 2000 to 5FFF - 16 KB total, ~8 full frames / ~50 packed frames
+	  LXI H, 02000h
 	  SHLD main_FifoReadPointer
 	  SHLD main_FifoWritePointer
   	  ;radio-specific init done
@@ -73,7 +77,7 @@ Machine_Test_Not_Radio:
 	  JMP 0F875h ;jump to monitor
 Machine_Test_Done:
   
-  ; 92 asm {
+  ; 98 asm {
 
   
   ; 1 ((uchar*)0xEF00)
@@ -84,17 +88,16 @@ Machine_Test_Done:
   mvi m, 255
   ; 1 ((uchar*)0xEF00)
   mvi m, 255
-  ; 101 fs_open("VIDEO/APPLE.APV");
+  ; 107 fs_open("VIDEO/APPLE.APV");
   lxi h, string0
   call fs_open
-  ; 104 asm{
-	LXI D, 04000h
+  ; 110 asm{
+	LHLD main_FifoReadPointer
+	XCHG
 	LXI H, 00100h ; header 256 bytes
     MVI  A, 004h;read command
 	CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
-	LHLD 04004h 
-	SHLD main_iNumberOfFrames
-	LHLD 04000h
+	LHLD main_FifoReadPointer
 	MOV A,H
 	STA main_Screen_Type
 	CPI 0h
@@ -103,33 +106,42 @@ SetScreen192x102:
 	LXI H, 0C113h
 	SHLD main_ScreenStartPointer
   
-  ; 120 apogeyScreen3A();
+  ; 125 apogeyScreen3A();
   call apogeyScreen3a
-  ; 121 asm {
+  ; 126 asm {
 	JMP SetScreenDone
 SetScreen128x60:
 	LXI H, 0E1DAh
 	SHLD main_ScreenStartPointer
   
-  ; 127 apogeyScreen2A();
+  ; 132 apogeyScreen2A();
   call apogeyScreen2a
-  ; 128 asm
+  ; 133 asm
 SetScreenDone:
-	
+	LHLD main_FifoReadPointer
+	LXI D,4
+	DAD D
+	MOV E,M
+	INX H
+	MOV D,M
+	XCHG
+	SHLD main_iNumberOfFrames
   
-  ; 135 asm {
+  ; 147 asm {
 	  LHLD main_FifoWritePointer
 	  XCHG
 	  LXI H, 03000h ; размер передачи 12k
       MVI  A, 004h;read command
 	  CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
-	  LXI H, 07000h
+	  LHLD main_FifoWritePointer
+	  LXI D, 03000h
+	  DAD D
 	  SHLD main_FifoWritePointer
   
-  ; 145 iFrameCounter = iNumberOfFrames;
+  ; 159 iFrameCounter = iNumberOfFrames;
   lhld main_iNumberOfFrames
   shld main_iFrameCounter
-  ; 147 asm{
+  ; 161 asm{
 Main_Loop_Start:
 	LHLD main_iFrameCounter
 	XRA A ; A=0
@@ -142,8 +154,8 @@ Fifo_Write_Start:
 	; first check if we have enough free space in fifo, granularity is 1024 bytes
 	; fifo is almost full when either (write!=7C00 and read-write>0 and read-write-8 < 0), or ( write=7C00 and (read> 7C00 or read < 4400) )
 	LHLD main_FifoWritePointer
-	MOV A,H
-	CPI 07Ch
+	LDA main_Fifo_Write_Threshold_1
+	CMP H
 	JZ Fifo_Write_Start2
 	;not end-buffer case, check read-write>0
 	LHLD main_FifoReadPointer
@@ -287,12 +299,12 @@ Fifo_Read_Do2:
 
 Do_Exit:
   
-  ; 306 apogeyScreen0();
+  ; 320 apogeyScreen0();
   call apogeyScreen0
-  ; 307 asm {
+  ; 321 asm {
 		JMP 0F875h ;jump to monitor
 	
-  ; 311 asm{
+  ; 325 asm{
 str_Unknown_Machine:	.db "UNKNOWN MACHINE",0
 	
   ret
@@ -1042,6 +1054,10 @@ main_iFrameCounter:
 main_Machine_Type:
  .ds 1
 main_Screen_Type:
+ .ds 1
+main_Fifo_Write_Threshold_1:
+ .ds 1
+main_Fifo_Write_Threshold_2:
  .ds 1
 fs_cmdLine:
  .dw $+2
