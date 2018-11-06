@@ -24,9 +24,9 @@ main:
       LXI  D, 0DBF3h; SELF_NAME  ; Собственное имя
       LXI  H, 0DCF3h; CMD_LINE   ; Командная строка	 
   
-  ; 46 fs_init();
+  ; 50 fs_init();
   call fs_init
-  ; 47 asm {
+  ; 51 asm {
 	  ;FIFO from 4000 to BFFF - 32 KB total, ~8 full frames / ~80 packed frames
 	  LXI H, 04000h
 	  SHLD main_FifoReadPointer
@@ -35,6 +35,14 @@ main:
 	  STA main_Fifo_Write_Threshold_1
 	  MVI A, 045h
 	  STA main_Fifo_Write_Threshold_2
+	  MVI A, 080h
+	  STA main_Fifo_Write_Threshold_3
+	  MVI A, 040h
+	  STA main_Fifo_Write_Threshold_4
+	  MVI A, 030h
+	  STA main_Fifo_Read_Threshold_1
+	  MVI A, 010h
+	  STA main_Fifo_Read_Threshold_2
   	  ;apogey-specific init done
 	  JMP Machine_Test_Done
 Machine_Test_Not_Apogey:
@@ -62,9 +70,9 @@ Machine_Test_Not_Apogey:
       LXI  D, 071F3h; SELF_NAME  ; Собственное имя
       LXI  H, 072F3h; CMD_LINE   ; Командная строка	  
   
-  ; 83 fs_init();
+  ; 95 fs_init();
   call fs_init
-  ; 84 asm {
+  ; 96 asm {
 	  ;FIFO from 2000 to 5FFF - 16 KB total, ~8 full frames / ~50 packed frames
 	  LXI H, 02000h
 	  SHLD main_FifoReadPointer
@@ -77,7 +85,7 @@ Machine_Test_Not_Radio:
 	  JMP 0F875h ;jump to monitor
 Machine_Test_Done:
   
-  ; 98 asm {
+  ; 110 asm {
 
   
   ; 1 ((uchar*)0xEF00)
@@ -88,10 +96,10 @@ Machine_Test_Done:
   mvi m, 255
   ; 1 ((uchar*)0xEF00)
   mvi m, 255
-  ; 107 fs_open("VIDEO/APPLE.APV");
+  ; 119 fs_open("VIDEO/APPLE.APV");
   lxi h, string0
   call fs_open
-  ; 110 asm{
+  ; 122 asm{
 	LHLD main_FifoReadPointer
 	XCHG
 	LXI H, 00100h ; header 256 bytes
@@ -106,17 +114,17 @@ SetScreen192x102:
 	LXI H, 0C113h
 	SHLD main_ScreenStartPointer
   
-  ; 125 apogeyScreen3A();
+  ; 137 apogeyScreen3A();
   call apogeyScreen3a
-  ; 126 asm {
+  ; 138 asm {
 	JMP SetScreenDone
 SetScreen128x60:
 	LXI H, 0E1DAh
 	SHLD main_ScreenStartPointer
   
-  ; 132 apogeyScreen2A();
+  ; 144 apogeyScreen2A();
   call apogeyScreen2a
-  ; 133 asm
+  ; 145 asm
 SetScreenDone:
 	LHLD main_FifoReadPointer
 	LXI D,4
@@ -127,7 +135,7 @@ SetScreenDone:
 	XCHG
 	SHLD main_iNumberOfFrames
   
-  ; 147 asm {
+  ; 159 asm {
 	  LHLD main_FifoWritePointer
 	  XCHG
 	  LXI H, 03000h ; размер передачи 12k
@@ -138,10 +146,10 @@ SetScreenDone:
 	  DAD D
 	  SHLD main_FifoWritePointer
   
-  ; 159 iFrameCounter = iNumberOfFrames;
+  ; 171 iFrameCounter = iNumberOfFrames;
   lhld main_iNumberOfFrames
   shld main_iFrameCounter
-  ; 161 asm{
+  ; 173 asm{
 Main_Loop_Start:
 	LHLD main_iFrameCounter
 	XRA A ; A=0
@@ -170,12 +178,17 @@ Fifo_Write_Start:
 	JMP Fifo_Read_Start ;skipping after all
 Fifo_Write_Start2:
 	;end-buffer case, checking if read > 7C00 (not wrapped) 
+	LDA main_Fifo_Write_Threshold_1
+	MOV B,A
 	LHLD main_FifoReadPointer
 	MOV A,H
-	CPI 07Ch
+	CMP B
 	JP Fifo_Read_Start ;read is > 7C00, skipping write
-	;now check if read < 4400 (wrapped) 
-	CPI 045h
+	;now check if read < 4400 (wrapped)
+	LDA main_Fifo_Write_Threshold_2
+	MOV B,A	
+	MOV A,H
+	CMP B
 	JM Fifo_Read_Start ;read is < 4400, skipping write
 	JMP Fifo_Write_Do ;writing after all
 Fifo_Write_Do:
@@ -188,10 +201,11 @@ Fifo_Write_Do:
 	MVI A, 004h
 	ADD H
 	MOV H, A
-	MVI A,080h
+	LDA main_Fifo_Write_Threshold_3
 	CMP H
 	JNZ Fifo_Write_Do2 ;if fifo write pointer is not at 0x8000, move on
-	MVI H,040h ; else wrap back to 0x4000 and move on
+	LDA main_Fifo_Write_Threshold_4
+	MOV H,A ; else wrap back to 0x4000 and move on
 Fifo_Write_Do2:	
 	SHLD main_FifoWritePointer
 
@@ -207,17 +221,21 @@ Fifo_Read_Start:
 	SUB H
 	JP Fifo_Read_Normal
 	;wrap case, calculating (read - write) instead
+	LDA main_Fifo_Read_Threshold_1
+	MOV B,A
+	LDA main_Fifo_Read_Threshold_2
+	MOV C,A
 	LHLD main_FifoReadPointer
 	MOV A,H
 	LHLD main_FifoWritePointer
 	SUB H
 	;ok, weve got (read - write),it should be positive. now check if its bigger than 48
-	SUI 030h
+	SUB B
 	JP Main_Loop_Start ;it IS bigger, meaning FIFO is almost empty, skipping read
 	JMP Fifo_Read_Do
 Fifo_Read_Normal:
 	;normal case, diff (write - read) is already in A, checking if its bigger than 16
-	SUI 010h
+	SUB C
 	JM Main_Loop_Start ;it is NOT bigger, meaning FIFO is almost empty, skipping read	
 Fifo_Read_Do:
 	;decrease frame counter
@@ -299,12 +317,12 @@ Fifo_Read_Do2:
 
 Do_Exit:
   
-  ; 320 apogeyScreen0();
+  ; 342 apogeyScreen0();
   call apogeyScreen0
-  ; 321 asm {
+  ; 343 asm {
 		JMP 0F875h ;jump to monitor
 	
-  ; 325 asm{
+  ; 347 asm{
 str_Unknown_Machine:	.db "UNKNOWN MACHINE",0
 	
   ret
@@ -1058,6 +1076,14 @@ main_Screen_Type:
 main_Fifo_Write_Threshold_1:
  .ds 1
 main_Fifo_Write_Threshold_2:
+ .ds 1
+main_Fifo_Write_Threshold_3:
+ .ds 1
+main_Fifo_Write_Threshold_4:
+ .ds 1
+main_Fifo_Read_Threshold_1:
+ .ds 1
+main_Fifo_Read_Threshold_2:
  .ds 1
 fs_cmdLine:
  .dw $+2

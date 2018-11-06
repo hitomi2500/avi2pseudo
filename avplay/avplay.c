@@ -16,6 +16,10 @@ void main() {
   char Screen_Type;
   char Fifo_Write_Threshold_1;
   char Fifo_Write_Threshold_2;
+  char Fifo_Write_Threshold_3;
+  char Fifo_Write_Threshold_4;
+  char Fifo_Read_Threshold_1;
+  char Fifo_Read_Threshold_2;
   
   //checking machine type
   asm{
@@ -53,6 +57,14 @@ asm {
 	  STA main_Fifo_Write_Threshold_1
 	  MVI A, 045h
 	  STA main_Fifo_Write_Threshold_2
+	  MVI A, 080h
+	  STA main_Fifo_Write_Threshold_3
+	  MVI A, 040h
+	  STA main_Fifo_Write_Threshold_4
+	  MVI A, 030h
+	  STA main_Fifo_Read_Threshold_1
+	  MVI A, 010h
+	  STA main_Fifo_Read_Threshold_2
   	  ;apogey-specific init done
 	  JMP Machine_Test_Done
 Machine_Test_Not_Apogey:
@@ -187,12 +199,17 @@ Fifo_Write_Start:
 	JMP Fifo_Read_Start ;skipping after all
 Fifo_Write_Start2:
 	;end-buffer case, checking if read > 7C00 (not wrapped) 
+	LDA main_Fifo_Write_Threshold_1
+	MOV B,A
 	LHLD main_FifoReadPointer
 	MOV A,H
-	CPI 07Ch
+	CMP B
 	JP Fifo_Read_Start ;read is > 7C00, skipping write
-	;now check if read < 4400 (wrapped) 
-	CPI 045h
+	;now check if read < 4400 (wrapped)
+	LDA main_Fifo_Write_Threshold_2
+	MOV B,A	
+	MOV A,H
+	CMP B
 	JM Fifo_Read_Start ;read is < 4400, skipping write
 	JMP Fifo_Write_Do ;writing after all
 Fifo_Write_Do:
@@ -205,10 +222,11 @@ Fifo_Write_Do:
 	MVI A, 004h
 	ADD H
 	MOV H, A
-	MVI A,080h
+	LDA main_Fifo_Write_Threshold_3
 	CMP H
 	JNZ Fifo_Write_Do2 ;if fifo write pointer is not at 0x8000, move on
-	MVI H,040h ; else wrap back to 0x4000 and move on
+	LDA main_Fifo_Write_Threshold_4
+	MOV H,A ; else wrap back to 0x4000 and move on
 Fifo_Write_Do2:	
 	SHLD main_FifoWritePointer
 
@@ -224,17 +242,21 @@ Fifo_Read_Start:
 	SUB H
 	JP Fifo_Read_Normal
 	;wrap case, calculating (read - write) instead
+	LDA main_Fifo_Read_Threshold_1
+	MOV B,A
+	LDA main_Fifo_Read_Threshold_2
+	MOV C,A
 	LHLD main_FifoReadPointer
 	MOV A,H
 	LHLD main_FifoWritePointer
 	SUB H
 	;ok, weve got (read - write),it should be positive. now check if its bigger than 48
-	SUI 030h
+	SUB B
 	JP Main_Loop_Start ;it IS bigger, meaning FIFO is almost empty, skipping read
 	JMP Fifo_Read_Do
 Fifo_Read_Normal:
 	;normal case, diff (write - read) is already in A, checking if its bigger than 16
-	SUI 010h
+	SUB C
 	JM Main_Loop_Start ;it is NOT bigger, meaning FIFO is almost empty, skipping read	
 Fifo_Read_Do:
 	;decrease frame counter
