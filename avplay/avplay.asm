@@ -252,8 +252,10 @@ Fifo_Read_Do:
 	MOV D,M
 	INX H
 	DAD D
+	LDA main_Fifo_Write_Threshold_3
+	MOV B,A
 	MOV A,H
-	SUI 080h
+	SUB B
 	JM Fifo_Read_Do2 ;if frame is NOT wrapped, unpack it as is
 	;frame IS wrapped, copy part that doesnt fit from 4000 to 8000
 	;HL still stores overwrapped value, so use that
@@ -317,12 +319,12 @@ Fifo_Read_Do2:
 
 Do_Exit:
   
-  ; 342 apogeyScreen0();
+  ; 344 apogeyScreen0();
   call apogeyScreen0
-  ; 343 asm {
+  ; 345 asm {
 		JMP 0F875h ;jump to monitor
 	
-  ; 347 asm{
+  ; 349 asm{
 str_Unknown_Machine:	.db "UNKNOWN MACHINE",0
 	
   ret
