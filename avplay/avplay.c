@@ -1,15 +1,26 @@
 #include <mem.h>
-#include <apogey/screen_constrcutor.h>
+#include <screen_constructor.h>
 #include <fs/fs.h>
 //#include <apogey/bios.h>
 #include "unpack_btree1.h"
+
+uchar* VG75;
+uchar* VT57;
+
+void apogey_hires();
+void apogey_lores();
+void radio_lores();
+void monitor_mode();
+uchar* apogeyVideoMem;
+uchar apogeyVideoBpl;
+ void * ScreenStartPointer;
 
 void main() {
   int i,j;
   char c;
   void * FifoReadPointer;
   void * FifoWritePointer;
-  void * ScreenStartPointer;
+
   int iNumberOfFrames;
   int iFrameCounter;
   char Machine_Type;
@@ -20,6 +31,7 @@ void main() {
   char Fifo_Write_Threshold_4;
   char Fifo_Read_Threshold_1;
   char Fifo_Read_Threshold_2;
+  char Fifo_Read_Threshold_3;
   
   //checking machine type
   asm{
@@ -42,6 +54,10 @@ void main() {
 	  MVI A,00
 	  STA main_Machine_Type
 	  ;apogey-specific init
+	  LXI  H, 0EF00h
+	  SHLD VG75
+	  LXI  H, 0F000h
+	  SHLD VT57
       MVI  A, 1		; Версия контроллера
       LXI  B, 0DE17h; BiosEntry  ; Точка входа SD BIOS
       LXI  D, 0DBF3h; SELF_NAME  ; Собственное имя
@@ -49,7 +65,7 @@ void main() {
   }	  
 	  fs_init();
 asm {
-	  ;FIFO from 4000 to BFFF - 32 KB total, ~8 full frames / ~80 packed frames
+	  ;FIFO from 4000 to 7FFF - 16 KB total, ~8 full frames / ~80 packed frames
 	  LXI H, 04000h
 	  SHLD main_FifoReadPointer
 	  SHLD main_FifoWritePointer
@@ -65,6 +81,8 @@ asm {
 	  STA main_Fifo_Read_Threshold_1
 	  MVI A, 010h
 	  STA main_Fifo_Read_Threshold_2
+	  MVI A, 040h
+	  STA main_Fifo_Read_Threshold_3
   	  ;apogey-specific init done
 	  JMP Machine_Test_Done
 Machine_Test_Not_Apogey:
@@ -87,6 +105,10 @@ Machine_Test_Not_Apogey:
 	  MVI A,01
 	  STA main_Machine_Type
 	  ;radio-specific init
+	  LXI  H, 0C000h
+	  SHLD VG75
+	  LXI  H, 0E000h
+	  SHLD VT57
       MVI  A, 1		; Версия контроллера
       LXI  B, 07417h; BiosEntry  ; Точка входа SD BIOS
       LXI  D, 071F3h; SELF_NAME  ; Собственное имя
@@ -98,6 +120,20 @@ asm {
 	  LXI H, 02000h
 	  SHLD main_FifoReadPointer
 	  SHLD main_FifoWritePointer
+	  MVI A, 05Ch
+	  STA main_Fifo_Write_Threshold_1
+	  MVI A, 025h
+	  STA main_Fifo_Write_Threshold_2
+	  MVI A, 060h
+	  STA main_Fifo_Write_Threshold_3
+	  MVI A, 020h
+	  STA main_Fifo_Write_Threshold_4
+	  MVI A, 030h
+	  STA main_Fifo_Read_Threshold_1
+	  MVI A, 010h
+	  STA main_Fifo_Read_Threshold_2
+	  MVI A, 040h
+	  STA main_Fifo_Read_Threshold_3
   	  ;radio-specific init done
 	  JMP Machine_Test_Done
 Machine_Test_Not_Radio:
@@ -131,17 +167,26 @@ Machine_Test_Done:
 	CPI 0h
 	JNZ SetScreen128x60
 SetScreen192x102:
-	LXI H, 0C113h
-	SHLD main_ScreenStartPointer
-  }
-	apogeyScreen3A();
-  asm {
+	}
+	apogey_hires();
+	//ScreenStartPointer = (void*)0xC113;
+	asm {
 	JMP SetScreenDone
 SetScreen128x60:
-	LXI H, 0E1DAh
-	SHLD main_ScreenStartPointer
-  }
-	apogeyScreen2A();
+	LDA main_Machine_Type
+	CPI 0 ;is apogey?
+	JNZ SetScreen128x60_Radio
+	}
+	apogey_lores();
+	//ScreenStartPointer = (void*)0xE1DA;	
+	asm{
+	JMP SetScreenDone
+SetScreen128x60_Radio:
+	}
+	radio_lores();
+	//ScreenStartPointer = (void*)0x76DA;	
+	
+	
   asm
   {
 SetScreenDone:
@@ -285,8 +330,13 @@ Fifo_Read_Do:
 	MOV A,B
 	ANI 00Fh
 	MOV B,A ;now we have a size in BC
-	LXI H, 04000h
-	LXI D, 08000h
+	XRA A ; A=0
+	MOV L,A
+	MOV E,A
+	LDA main_Fifo_Write_Threshold_4
+	MOV H,A
+	LDA main_Fifo_Write_Threshold_3
+	MOV D,A
 Fifo_Read_Copy_Loop:
 	MOV A,M
 	STAX D
@@ -300,7 +350,7 @@ Fifo_Read_Copy_Loop:
 	JNZ Fifo_Read_Copy_Loop
 	;copy done, now processing frame as-is
 	;we should init DE and HL before calling unpack
-	LHLD main_ScreenStartPointer
+	LHLD ScreenStartPointer
 	XCHG
 	LHLD main_FifoReadPointer
 	CALL unpack_btree1
@@ -313,8 +363,10 @@ Fifo_Read_Copy_Loop:
 	MOV D,M
 	INX H
 	DAD D
+	LDA main_Fifo_Read_Threshold_3
+	MOV B,A
 	MOV A,H
-	SUI 040h
+	SUB B
 	MOV H,A
 	SHLD main_FifoReadPointer
 	JMP Main_Loop_Start ;go back to mail loop start	
@@ -322,7 +374,7 @@ Fifo_Read_Copy_Loop:
 Fifo_Read_Do2:	
 	;non-wrapped unpack
 	;we should init DE before calling unpack
-	LHLD main_ScreenStartPointer
+	LHLD ScreenStartPointer
 	XCHG
 	LHLD main_FifoReadPointer
 	CALL unpack_btree1
@@ -341,12 +393,47 @@ Fifo_Read_Do2:
 Do_Exit:
   }
 	//restore video mode
-	apogeyScreen0();
-	asm {
-		JMP 0F875h ;jump to monitor
+	asm{
+	LDA main_Machine_Type
+	CPI 0 ;is apogey?
+	JNZ Do_Exit_Radio
+	call apogey_stdmode
+	JMP 0F875h ;jump to monitor
+Do_Exit_Radio:
+	call rk_stdmode
+	JMP 0F875h ;jump to monitor	
 	}
 	
 	asm{
 str_Unknown_Machine:	.db "UNKNOWN MACHINE",0
 	}
+	
 }
+
+
+void apogey_hires() {
+  APOGEY_SCREEN_ECONOMY(0xC100,64, 51, 7, 0x33, 75, 1, 0, 1);
+  ScreenStartPointer = (void*)0xC113;
+}
+
+void apogey_lores() {
+  APOGEY_SCREEN_ECONOMY(0xE1D0, 37, 31, 3, 0x77, 75, 1, 0, 0);
+  ScreenStartPointer = (void*)0xE1DA;
+}	
+
+void radio_lores() {
+  APOGEY_SCREEN_ECONOMY(0x76D0, 37, 31, 3, 0x77, 75, 1, 0, 0);
+  ScreenStartPointer = (void*)0x76DA;
+}	
+
+void apogey_stdmode() {
+  APOGEY_SCREEN_STD(0xE1D0, 30, 25, 3, 0x99, 78, 0, 0, 0);
+  ScreenStartPointer = (void*)0xE1DA;
+}	
+
+void rk_stdmode() {
+  APOGEY_SCREEN_STD(0x76D0, 30, 25, 3, 0x99, 78, 0, 0, 0);
+  ScreenStartPointer = (void*)0x76DA;
+}	
+	
+	

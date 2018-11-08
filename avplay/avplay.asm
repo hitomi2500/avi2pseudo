@@ -19,15 +19,19 @@ main:
 	  MVI A,00
 	  STA main_Machine_Type
 	  ;apogey-specific init
+	  LXI  H, 0EF00h
+	  SHLD VG75
+	  LXI  H, 0F000h
+	  SHLD VT57
       MVI  A, 1		; ‚ерсиЯ контроллера
       LXI  B, 0DE17h; BiosEntry  ; ’очка входа SD BIOS
       LXI  D, 0DBF3h; SELF_NAME  ; ‘обственное имЯ
       LXI  H, 0DCF3h; CMD_LINE   ; ЉоманднаЯ строка	 
   
-  ; 50 fs_init();
+  ; 66 fs_init();
   call fs_init
-  ; 51 asm {
-	  ;FIFO from 4000 to BFFF - 32 KB total, ~8 full frames / ~80 packed frames
+  ; 67 asm {
+	  ;FIFO from 4000 to 7FFF - 16 KB total, ~8 full frames / ~80 packed frames
 	  LXI H, 04000h
 	  SHLD main_FifoReadPointer
 	  SHLD main_FifoWritePointer
@@ -43,6 +47,8 @@ main:
 	  STA main_Fifo_Read_Threshold_1
 	  MVI A, 010h
 	  STA main_Fifo_Read_Threshold_2
+	  MVI A, 040h
+	  STA main_Fifo_Read_Threshold_3
   	  ;apogey-specific init done
 	  JMP Machine_Test_Done
 Machine_Test_Not_Apogey:
@@ -65,18 +71,36 @@ Machine_Test_Not_Apogey:
 	  MVI A,01
 	  STA main_Machine_Type
 	  ;radio-specific init
+	  LXI  H, 0C000h
+	  SHLD VG75
+	  LXI  H, 0E000h
+	  SHLD VT57
       MVI  A, 1		; ‚ерсиЯ контроллера
       LXI  B, 07417h; BiosEntry  ; ’очка входа SD BIOS
       LXI  D, 071F3h; SELF_NAME  ; ‘обственное имЯ
       LXI  H, 072F3h; CMD_LINE   ; ЉоманднаЯ строка	  
   
-  ; 95 fs_init();
+  ; 117 fs_init();
   call fs_init
-  ; 96 asm {
+  ; 118 asm {
 	  ;FIFO from 2000 to 5FFF - 16 KB total, ~8 full frames / ~50 packed frames
 	  LXI H, 02000h
 	  SHLD main_FifoReadPointer
 	  SHLD main_FifoWritePointer
+	  MVI A, 05Ch
+	  STA main_Fifo_Write_Threshold_1
+	  MVI A, 025h
+	  STA main_Fifo_Write_Threshold_2
+	  MVI A, 060h
+	  STA main_Fifo_Write_Threshold_3
+	  MVI A, 020h
+	  STA main_Fifo_Write_Threshold_4
+	  MVI A, 030h
+	  STA main_Fifo_Read_Threshold_1
+	  MVI A, 010h
+	  STA main_Fifo_Read_Threshold_2
+	  MVI A, 040h
+	  STA main_Fifo_Read_Threshold_3
   	  ;radio-specific init done
 	  JMP Machine_Test_Done
 Machine_Test_Not_Radio:
@@ -85,21 +109,22 @@ Machine_Test_Not_Radio:
 	  JMP 0F875h ;jump to monitor
 Machine_Test_Done:
   
-  ; 110 asm {
+  ; 146 asm {
 
   
-  ; 1 ((uchar*)0xEF00)
-  lxi h, 61185
+  ; 151 VG75[1] = 0x80;Сложение с константой 1
+  lhld VG75
+  inx h
   mvi m, 128
-  ; 1 ((uchar*)0xEF00)
-  dcr l
+  ; 152 VG75[0] = 0xFF;Сложение с константой 0
+  lhld VG75
   mvi m, 255
-  ; 1 ((uchar*)0xEF00)
+  ; 153 VG75[0] = 0xFF;Сложение с константой 0
   mvi m, 255
-  ; 119 fs_open("VIDEO/APPLE.APV");
+  ; 155 fs_open("VIDEO/APPLE.APV");
   lxi h, string0
   call fs_open
-  ; 122 asm{
+  ; 158 asm{
 	LHLD main_FifoReadPointer
 	XCHG
 	LXI H, 00100h ; header 256 bytes
@@ -111,20 +136,25 @@ Machine_Test_Done:
 	CPI 0h
 	JNZ SetScreen128x60
 SetScreen192x102:
-	LXI H, 0C113h
-	SHLD main_ScreenStartPointer
-  
-  ; 137 apogeyScreen3A();
-  call apogeyScreen3a
-  ; 138 asm {
+	
+  ; 171 apogey_hires();
+  call apogey_hires
+  ; 173 asm {
 	JMP SetScreenDone
 SetScreen128x60:
-	LXI H, 0E1DAh
-	SHLD main_ScreenStartPointer
-  
-  ; 144 apogeyScreen2A();
-  call apogeyScreen2a
-  ; 145 asm
+	LDA main_Machine_Type
+	CPI 0 ;is apogey?
+	JNZ SetScreen128x60_Radio
+	
+  ; 180 apogey_lores();
+  call apogey_lores
+  ; 182 asm{
+	JMP SetScreenDone
+SetScreen128x60_Radio:
+	
+  ; 186 radio_lores();
+  call radio_lores
+  ; 190 asm
 SetScreenDone:
 	LHLD main_FifoReadPointer
 	LXI D,4
@@ -135,7 +165,7 @@ SetScreenDone:
 	XCHG
 	SHLD main_iNumberOfFrames
   
-  ; 159 asm {
+  ; 204 asm {
 	  LHLD main_FifoWritePointer
 	  XCHG
 	  LXI H, 03000h ; размер передачи 12k
@@ -146,10 +176,10 @@ SetScreenDone:
 	  DAD D
 	  SHLD main_FifoWritePointer
   
-  ; 171 iFrameCounter = iNumberOfFrames;
+  ; 216 iFrameCounter = iNumberOfFrames;
   lhld main_iNumberOfFrames
   shld main_iFrameCounter
-  ; 173 asm{
+  ; 218 asm{
 Main_Loop_Start:
 	LHLD main_iFrameCounter
 	XRA A ; A=0
@@ -264,8 +294,13 @@ Fifo_Read_Do:
 	MOV A,B
 	ANI 00Fh
 	MOV B,A ;now we have a size in BC
-	LXI H, 04000h
-	LXI D, 08000h
+	XRA A ; A=0
+	MOV L,A
+	MOV E,A
+	LDA main_Fifo_Write_Threshold_4
+	MOV H,A
+	LDA main_Fifo_Write_Threshold_3
+	MOV D,A
 Fifo_Read_Copy_Loop:
 	MOV A,M
 	STAX D
@@ -279,7 +314,7 @@ Fifo_Read_Copy_Loop:
 	JNZ Fifo_Read_Copy_Loop
 	;copy done, now processing frame as-is
 	;we should init DE and HL before calling unpack
-	LHLD main_ScreenStartPointer
+	LHLD ScreenStartPointer
 	XCHG
 	LHLD main_FifoReadPointer
 	CALL unpack_btree1
@@ -292,8 +327,10 @@ Fifo_Read_Copy_Loop:
 	MOV D,M
 	INX H
 	DAD D
+	LDA main_Fifo_Read_Threshold_3
+	MOV B,A
 	MOV A,H
-	SUI 040h
+	SUB B
 	MOV H,A
 	SHLD main_FifoReadPointer
 	JMP Main_Loop_Start ;go back to mail loop start	
@@ -301,7 +338,7 @@ Fifo_Read_Copy_Loop:
 Fifo_Read_Do2:	
 	;non-wrapped unpack
 	;we should init DE before calling unpack
-	LHLD main_ScreenStartPointer
+	LHLD ScreenStartPointer
 	XCHG
 	LHLD main_FifoReadPointer
 	CALL unpack_btree1
@@ -319,14 +356,610 @@ Fifo_Read_Do2:
 
 Do_Exit:
   
-  ; 344 apogeyScreen0();
-  call apogeyScreen0
-  ; 345 asm {
-		JMP 0F875h ;jump to monitor
+  ; 396 asm{
+	LDA main_Machine_Type
+	CPI 0 ;is apogey?
+	JNZ Do_Exit_Radio
+	call apogey_stdmode
+	JMP 0F875h ;jump to monitor
+Do_Exit_Radio:
+	call rk_stdmode
+	JMP 0F875h ;jump to monitor	
 	
-  ; 349 asm{
+  ; 407 asm{
 str_Unknown_Machine:	.db "UNKNOWN MACHINE",0
 	
+  ret
+  ; --- apogey_hires -----------------------------------------------------------------
+apogey_hires:
+  push b
+  ; 3 memset((uchar*)MEM_ADDR, 0, (HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+2); 
+  lxi h, 49408
+  shld memset_1
+  xra a
+  sta memset_2
+  lxi h, 3841
+  call memset
+  ; 4 for(v=(uchar*)(MEM_ADDR)-1, i=TOP_INVISIBLE; i; --i) 
+  lxi b, 49407
+  mvi a, 7
+  sta apogey_hires_i
+l0:
+  ; convertToConfition
+  lda apogey_hires_i
+  ora a
+  jz l1
+  ; 5 v+=2, *v = 0xF1; Сложение BC с константой 2
+  inx b
+  inx b
+  mvi a, 241
+  stax b
+l2:
+  lxi h, apogey_hires_i
+  dcr m
+  jmp l0
+l1:
+  ; 6 if(FILL_EOL) 7 for(i = HEIGHT; i; --i) 
+  mvi a, 51
+  sta apogey_hires_i
+l4:
+  ; convertToConfition
+  lda apogey_hires_i
+  ora a
+  jz l5
+  ; 8 v += (BPL), *v = 0xF1; Сложение с BC
+  lxi h, 75
+  dad b
+  mov b, h
+  mov c, l
+  mvi a, 241
+  stax b
+l6:
+  lxi h, apogey_hires_i
+  dcr m
+  jmp l4
+l5:
+  ; 9 ((uchar*)MEM_ADDR)[(HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+1] = 0xFF; 
+  lxi h, 53248
+  mvi m, 255
+  ; 10 apogeyVideoMem = (uchar*)(MEM_ADDR) + (TOP_INVISIBLE)*2 + 9; 
+  lxi h, 49431
+  shld apogeyVideoMem
+  ; 11 apogeyVideoBpl = (BPL); 
+  mvi a, 75
+  sta apogeyVideoBpl
+  ; 1 VG75[1] = 0; Сложение с константой 1
+  lhld VG75
+  inx h
+  mvi m, 0
+  ; 2 VG75[0] = 78-1; Сложение с константой 0
+  lhld VG75
+  mvi m, 77
+  ; 3 VG75[0] = (((FONT&0xF) >= 9) ? 0 : 0x40) | (FULL_HEIGHT-1); Сложение с константой 0
+  mvi m, 127
+  ; 4 VG75[0] = FONT; Сложение с константой 0
+  mvi m, 51
+  ; 5 VG75[0] = ((HIDDEN_ATTRIB) ? 0 : 0x40) | ((FONT&0xF)==9 ? 0x80 : 0) | 0x13; Сложение с константой 0
+  mvi m, 83
+  ; 6 VG75[1] = 0x23; Сложение с константой 1
+  inx h
+  mvi m, 35
+  ; 7 while((VG75[1] & 0x20) == 0); 
+l13:
+  ; Сложение с константой 1
+  lhld VG75
+  inx h
+  mov a, m
+  ani 32
+  jnz l14
+  jmp l13
+l14:
+  ; 8 while((VG75[1] & 0x20) == 0); 
+l15:
+  ; Сложение с константой 1
+  lhld VG75
+  inx h
+  mov a, m
+  ani 32
+  jnz l16
+  jmp l15
+l16:
+  ; 9 VT57[8] = 0x80; Сложение
+  lhld VT57
+  lxi d, 8
+  dad d
+  mvi m, 128
+  ; 10 VT57[4] = (uchar)(MEM_ADDR); Сложение с константой 4
+  lhld VT57
+  inx h
+  inx h
+  inx h
+  inx h
+  mvi m, 0
+  ; 11 VT57[4] = (uchar)((MEM_ADDR)>>8); Сложение с константой 4
+  lhld VT57
+  inx h
+  inx h
+  inx h
+  inx h
+  mvi m, 193
+  ; 12 VT57[5] = (uchar)((MEM_SIZE)-1); Сложение
+  lhld VT57
+  lxi d, 5
+  dad d
+  mvi m, 0
+  ; 13 VT57[5] = 0x40 | (uchar)(((MEM_SIZE)-1)>>8); Сложение
+  lhld VT57
+  lxi d, 5
+  dad d
+  mvi m, 79
+  ; 14 VT57[8] = 0xA4; Сложение
+  lhld VT57
+  lxi d, 8
+  dad d
+  mvi m, 164
+  ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 
+ ei 
+  ; 15 asm { di } 416 ScreenStartPointer = (void*)0xC113;
+  lxi h, 49427
+  shld ScreenStartPointer
+  pop b
+  ret
+  ; --- apogey_lores -----------------------------------------------------------------
+apogey_lores:
+  push b
+  ; 3 memset((uchar*)MEM_ADDR, 0, (HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+2); 
+  lxi h, 57808
+  shld memset_1
+  xra a
+  sta memset_2
+  lxi h, 2333
+  call memset
+  ; 4 for(v=(uchar*)(MEM_ADDR)-1, i=TOP_INVISIBLE; i; --i) 
+  lxi b, 57807
+  mvi a, 3
+  sta apogey_lores_i
+l19:
+  ; convertToConfition
+  lda apogey_lores_i
+  ora a
+  jz l20
+  ; 5 v+=2, *v = 0xF1; Сложение BC с константой 2
+  inx b
+  inx b
+  mvi a, 241
+  stax b
+l21:
+  lxi h, apogey_lores_i
+  dcr m
+  jmp l19
+l20:
+  ; 6 if(FILL_EOL) 7 for(i = HEIGHT; i; --i) 
+  mvi a, 31
+  sta apogey_lores_i
+l23:
+  ; convertToConfition
+  lda apogey_lores_i
+  ora a
+  jz l24
+  ; 8 v += (BPL), *v = 0xF1; Сложение с BC
+  lxi h, 75
+  dad b
+  mov b, h
+  mov c, l
+  mvi a, 241
+  stax b
+l25:
+  lxi h, apogey_lores_i
+  dcr m
+  jmp l23
+l24:
+  ; 9 ((uchar*)MEM_ADDR)[(HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+1] = 0xFF; 
+  lxi h, 60140
+  mvi m, 255
+  ; 10 apogeyVideoMem = (uchar*)(MEM_ADDR) + (TOP_INVISIBLE)*2 + 9; 
+  lxi h, 57823
+  shld apogeyVideoMem
+  ; 11 apogeyVideoBpl = (BPL); 
+  mvi a, 75
+  sta apogeyVideoBpl
+  ; 1 VG75[1] = 0; Сложение с константой 1
+  lhld VG75
+  inx h
+  mvi m, 0
+  ; 2 VG75[0] = 78-1; Сложение с константой 0
+  lhld VG75
+  mvi m, 77
+  ; 3 VG75[0] = (((FONT&0xF) >= 9) ? 0 : 0x40) | (FULL_HEIGHT-1); Сложение с константой 0
+  mvi m, 100
+  ; 4 VG75[0] = FONT; Сложение с константой 0
+  mvi m, 119
+  ; 5 VG75[0] = ((HIDDEN_ATTRIB) ? 0 : 0x40) | ((FONT&0xF)==9 ? 0x80 : 0) | 0x13; Сложение с константой 0
+  mvi m, 83
+  ; 6 VG75[1] = 0x23; Сложение с константой 1
+  inx h
+  mvi m, 35
+  ; 7 while((VG75[1] & 0x20) == 0); 
+l32:
+  ; Сложение с константой 1
+  lhld VG75
+  inx h
+  mov a, m
+  ani 32
+  jnz l33
+  jmp l32
+l33:
+  ; 8 while((VG75[1] & 0x20) == 0); 
+l34:
+  ; Сложение с константой 1
+  lhld VG75
+  inx h
+  mov a, m
+  ani 32
+  jnz l35
+  jmp l34
+l35:
+  ; 9 VT57[8] = 0x80; Сложение
+  lhld VT57
+  lxi d, 8
+  dad d
+  mvi m, 128
+  ; 10 VT57[4] = (uchar)(MEM_ADDR); Сложение с константой 4
+  lhld VT57
+  inx h
+  inx h
+  inx h
+  inx h
+  mvi m, 208
+  ; 11 VT57[4] = (uchar)((MEM_ADDR)>>8); Сложение с константой 4
+  lhld VT57
+  inx h
+  inx h
+  inx h
+  inx h
+  mvi m, 225
+  ; 12 VT57[5] = (uchar)((MEM_SIZE)-1); Сложение
+  lhld VT57
+  lxi d, 5
+  dad d
+  mvi m, 28
+  ; 13 VT57[5] = 0x40 | (uchar)(((MEM_SIZE)-1)>>8); Сложение
+  lhld VT57
+  lxi d, 5
+  dad d
+  mvi m, 73
+  ; 14 VT57[8] = 0xA4; Сложение
+  lhld VT57
+  lxi d, 8
+  dad d
+  mvi m, 164
+  ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 15 asm { di } 
+ di 
+  ; 421 ScreenStartPointer = (void*)0xE1DA;
+  lxi h, 57818
+  shld ScreenStartPointer
+  pop b
+  ret
+  ; --- radio_lores -----------------------------------------------------------------
+radio_lores:
+  push b
+  ; 3 memset((uchar*)MEM_ADDR, 0, (HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+2); 
+  lxi h, 30416
+  shld memset_1
+  xra a
+  sta memset_2
+  lxi h, 2333
+  call memset
+  ; 4 for(v=(uchar*)(MEM_ADDR)-1, i=TOP_INVISIBLE; i; --i) 
+  lxi b, 30415
+  mvi a, 3
+  sta radio_lores_i
+l38:
+  ; convertToConfition
+  lda radio_lores_i
+  ora a
+  jz l39
+  ; 5 v+=2, *v = 0xF1; Сложение BC с константой 2
+  inx b
+  inx b
+  mvi a, 241
+  stax b
+l40:
+  lxi h, radio_lores_i
+  dcr m
+  jmp l38
+l39:
+  ; 6 if(FILL_EOL) 7 for(i = HEIGHT; i; --i) 
+  mvi a, 31
+  sta radio_lores_i
+l42:
+  ; convertToConfition
+  lda radio_lores_i
+  ora a
+  jz l43
+  ; 8 v += (BPL), *v = 0xF1; Сложение с BC
+  lxi h, 75
+  dad b
+  mov b, h
+  mov c, l
+  mvi a, 241
+  stax b
+l44:
+  lxi h, radio_lores_i
+  dcr m
+  jmp l42
+l43:
+  ; 9 ((uchar*)MEM_ADDR)[(HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+1] = 0xFF; 
+  lxi h, 32748
+  mvi m, 255
+  ; 10 apogeyVideoMem = (uchar*)(MEM_ADDR) + (TOP_INVISIBLE)*2 + 9; 
+  lxi h, 30431
+  shld apogeyVideoMem
+  ; 11 apogeyVideoBpl = (BPL); 
+  mvi a, 75
+  sta apogeyVideoBpl
+  ; 1 VG75[1] = 0; Сложение с константой 1
+  lhld VG75
+  inx h
+  mvi m, 0
+  ; 2 VG75[0] = 78-1; Сложение с константой 0
+  lhld VG75
+  mvi m, 77
+  ; 3 VG75[0] = (((FONT&0xF) >= 9) ? 0 : 0x40) | (FULL_HEIGHT-1); Сложение с константой 0
+  mvi m, 100
+  ; 4 VG75[0] = FONT; Сложение с константой 0
+  mvi m, 119
+  ; 5 VG75[0] = ((HIDDEN_ATTRIB) ? 0 : 0x40) | ((FONT&0xF)==9 ? 0x80 : 0) | 0x13; Сложение с константой 0
+  mvi m, 83
+  ; 6 VG75[1] = 0x23; Сложение с константой 1
+  inx h
+  mvi m, 35
+  ; 7 while((VG75[1] & 0x20) == 0); 
+l51:
+  ; Сложение с константой 1
+  lhld VG75
+  inx h
+  mov a, m
+  ani 32
+  jnz l52
+  jmp l51
+l52:
+  ; 8 while((VG75[1] & 0x20) == 0); 
+l53:
+  ; Сложение с константой 1
+  lhld VG75
+  inx h
+  mov a, m
+  ani 32
+  jnz l54
+  jmp l53
+l54:
+  ; 9 VT57[8] = 0x80; Сложение
+  lhld VT57
+  lxi d, 8
+  dad d
+  mvi m, 128
+  ; 10 VT57[4] = (uchar)(MEM_ADDR); Сложение с константой 4
+  lhld VT57
+  inx h
+  inx h
+  inx h
+  inx h
+  mvi m, 208
+  ; 11 VT57[4] = (uchar)((MEM_ADDR)>>8); Сложение с константой 4
+  lhld VT57
+  inx h
+  inx h
+  inx h
+  inx h
+  mvi m, 118
+  ; 12 VT57[5] = (uchar)((MEM_SIZE)-1); Сложение
+  lhld VT57
+  lxi d, 5
+  dad d
+  mvi m, 28
+  ; 13 VT57[5] = 0x40 | (uchar)(((MEM_SIZE)-1)>>8); Сложение
+  lhld VT57
+  lxi d, 5
+  dad d
+  mvi m, 73
+  ; 14 VT57[8] = 0xA4; Сложение
+  lhld VT57
+  lxi d, 8
+  dad d
+  mvi m, 164
+  ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 15 asm { di } 
+ di 
+  ; 426 ScreenStartPointer = (void*)0x76DA;
+  lxi h, 30426
+  shld ScreenStartPointer
+  pop b
+  ret
+  ; --- apogey_stdmode -----------------------------------------------------------------
+apogey_stdmode:
+  push b
+  ; 3 memset((uchar*)(MEM_ADDR), 0, (FULL_HEIGHT)*(BPL)); 
+  lxi h, 57808
+  shld memset_1
+  xra a
+  sta memset_2
+  lxi h, 2340
+  call memset
+  ; 4 if(FILL_EOL) { 5 v = (uchar*)(MEM_ADDR)-1; 9 apogeyVideoMem = (uchar*)(MEM_ADDR) + (TOP_INVISIBLE)*(BPL) + ((HIDDEN_ATTRIB) ? 9 : 8); 
+  lxi h, 58050
+  shld apogeyVideoMem
+  ; 10 apogeyVideoBpl = (BPL); 
+  mvi a, 78
+  sta apogeyVideoBpl
+  ; 1 VG75[1] = 0; Сложение с константой 1
+  lhld VG75
+  inx h
+  mvi m, 0
+  ; 2 VG75[0] = 78-1; Сложение с константой 0
+  lhld VG75
+  mvi m, 77
+  ; 3 VG75[0] = (((FONT&0xF) >= 9) ? 0 : 0x40) | (FULL_HEIGHT-1); Сложение с константой 0
+  mvi m, 29
+  ; 4 VG75[0] = FONT; Сложение с константой 0
+  mvi m, 153
+  ; 5 VG75[0] = ((HIDDEN_ATTRIB) ? 0 : 0x40) | ((FONT&0xF)==9 ? 0x80 : 0) | 0x13; Сложение с константой 0
+  mvi m, 211
+  ; 6 VG75[1] = 0x23; Сложение с константой 1
+  inx h
+  mvi m, 35
+  ; 7 while((VG75[1] & 0x20) == 0); 
+l69:
+  ; Сложение с константой 1
+  lhld VG75
+  inx h
+  mov a, m
+  ani 32
+  jnz l70
+  jmp l69
+l70:
+  ; 8 while((VG75[1] & 0x20) == 0); 
+l71:
+  ; Сложение с константой 1
+  lhld VG75
+  inx h
+  mov a, m
+  ani 32
+  jnz l72
+  jmp l71
+l72:
+  ; 9 VT57[8] = 0x80; Сложение
+  lhld VT57
+  lxi d, 8
+  dad d
+  mvi m, 128
+  ; 10 VT57[4] = (uchar)(MEM_ADDR); Сложение с константой 4
+  lhld VT57
+  inx h
+  inx h
+  inx h
+  inx h
+  mvi m, 208
+  ; 11 VT57[4] = (uchar)((MEM_ADDR)>>8); Сложение с константой 4
+  lhld VT57
+  inx h
+  inx h
+  inx h
+  inx h
+  mvi m, 225
+  ; 12 VT57[5] = (uchar)((MEM_SIZE)-1); Сложение
+  lhld VT57
+  lxi d, 5
+  dad d
+  mvi m, 35
+  ; 13 VT57[5] = 0x40 | (uchar)(((MEM_SIZE)-1)>>8); Сложение
+  lhld VT57
+  lxi d, 5
+  dad d
+  mvi m, 73
+  ; 14 VT57[8] = 0xA4; Сложение
+  lhld VT57
+  lxi d, 8
+  dad d
+  mvi m, 164
+  ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 15 asm { di } 
+ di 
+  ; 431 ScreenStartPointer = (void*)0xE1DA;
+  lxi h, 57818
+  shld ScreenStartPointer
+  pop b
+  ret
+  ; --- rk_stdmode -----------------------------------------------------------------
+rk_stdmode:
+  push b
+  ; 3 memset((uchar*)(MEM_ADDR), 0, (FULL_HEIGHT)*(BPL)); 
+  lxi h, 30416
+  shld memset_1
+  xra a
+  sta memset_2
+  lxi h, 2340
+  call memset
+  ; 4 if(FILL_EOL) { 5 v = (uchar*)(MEM_ADDR)-1; 9 apogeyVideoMem = (uchar*)(MEM_ADDR) + (TOP_INVISIBLE)*(BPL) + ((HIDDEN_ATTRIB) ? 9 : 8); 
+  lxi h, 30658
+  shld apogeyVideoMem
+  ; 10 apogeyVideoBpl = (BPL); 
+  mvi a, 78
+  sta apogeyVideoBpl
+  ; 1 VG75[1] = 0; Сложение с константой 1
+  lhld VG75
+  inx h
+  mvi m, 0
+  ; 2 VG75[0] = 78-1; Сложение с константой 0
+  lhld VG75
+  mvi m, 77
+  ; 3 VG75[0] = (((FONT&0xF) >= 9) ? 0 : 0x40) | (FULL_HEIGHT-1); Сложение с константой 0
+  mvi m, 29
+  ; 4 VG75[0] = FONT; Сложение с константой 0
+  mvi m, 153
+  ; 5 VG75[0] = ((HIDDEN_ATTRIB) ? 0 : 0x40) | ((FONT&0xF)==9 ? 0x80 : 0) | 0x13; Сложение с константой 0
+  mvi m, 211
+  ; 6 VG75[1] = 0x23; Сложение с константой 1
+  inx h
+  mvi m, 35
+  ; 7 while((VG75[1] & 0x20) == 0); 
+l87:
+  ; Сложение с константой 1
+  lhld VG75
+  inx h
+  mov a, m
+  ani 32
+  jnz l88
+  jmp l87
+l88:
+  ; 8 while((VG75[1] & 0x20) == 0); 
+l89:
+  ; Сложение с константой 1
+  lhld VG75
+  inx h
+  mov a, m
+  ani 32
+  jnz l90
+  jmp l89
+l90:
+  ; 9 VT57[8] = 0x80; Сложение
+  lhld VT57
+  lxi d, 8
+  dad d
+  mvi m, 128
+  ; 10 VT57[4] = (uchar)(MEM_ADDR); Сложение с константой 4
+  lhld VT57
+  inx h
+  inx h
+  inx h
+  inx h
+  mvi m, 208
+  ; 11 VT57[4] = (uchar)((MEM_ADDR)>>8); Сложение с константой 4
+  lhld VT57
+  inx h
+  inx h
+  inx h
+  inx h
+  mvi m, 118
+  ; 12 VT57[5] = (uchar)((MEM_SIZE)-1); Сложение
+  lhld VT57
+  lxi d, 5
+  dad d
+  mvi m, 35
+  ; 13 VT57[5] = 0x40 | (uchar)(((MEM_SIZE)-1)>>8); Сложение
+  lhld VT57
+  lxi d, 5
+  dad d
+  mvi m, 73
+  ; 14 VT57[8] = 0xA4; Сложение
+  lhld VT57
+  lxi d, 8
+  dad d
+  mvi m, 164
+  ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 15 asm { di } 
+ di 
+  ; 436 ScreenStartPointer = (void*)0x76DA;
+  lxi h, 30426
+  shld ScreenStartPointer
+  pop b
   ret
   ; --- unpack_btree1 -----------------------------------------------------------------
 unpack_btree1:
@@ -741,300 +1374,6 @@ fs_open:
   xra a
   jmp fs_open0
   ret
-  ; --- apogeyScreen3a -----------------------------------------------------------------
-apogeyScreen3a:
-  push b
-  ; 3 memset((uchar*)MEM_ADDR, 0, (HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+2); 
-  lxi h, 49407
-  shld memset_1
-  xra a
-  sta memset_2
-  lxi h, 3841
-  call memset
-  ; 4 for(v=(uchar*)(MEM_ADDR)-1, i=TOP_INVISIBLE; i; --i) 
-  lxi b, 49406
-  mvi a, 7
-  sta apogeyScreen3a_i
-l0:
-  ; convertToConfition
-  lda apogeyScreen3a_i
-  ora a
-  jz l1
-  ; 5 v+=2, *v = 0xF1; Сложение BC с константой 2
-  inx b
-  inx b
-  mvi a, 241
-  stax b
-l2:
-  lxi h, apogeyScreen3a_i
-  dcr m
-  jmp l0
-l1:
-  ; 6 if(FILL_EOL) 7 for(i = HEIGHT; i; --i) 
-  mvi a, 51
-  sta apogeyScreen3a_i
-l4:
-  ; convertToConfition
-  lda apogeyScreen3a_i
-  ora a
-  jz l5
-  ; 8 v += (BPL), *v = 0xF1; Сложение с BC
-  lxi h, 75
-  dad b
-  mov b, h
-  mov c, l
-  mvi a, 241
-  stax b
-l6:
-  lxi h, apogeyScreen3a_i
-  dcr m
-  jmp l4
-l5:
-  ; 9 ((uchar*)MEM_ADDR)[(HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+1] = 0xFF; 
-  lxi h, 53247
-  mvi m, 255
-  ; 10 apogeyVideoMem = (uchar*)(MEM_ADDR) + (TOP_INVISIBLE)*2 + 9; 
-  lxi h, 49430
-  shld apogeyVideoMem
-  ; 11 apogeyVideoBpl = (BPL); 
-  mvi a, 75
-  sta apogeyVideoBpl
-  ; 1 ((uchar*)0xEF00)
-  lxi h, 61185
-  mvi m, 0
-  ; 1 ((uchar*)0xEF00)
-  dcr l
-  mvi m, 77
-  ; 1 ((uchar*)0xEF00)
-  mvi m, 127
-  ; 1 ((uchar*)0xEF00)
-  mvi m, 51
-  ; 1 ((uchar*)0xEF00)
-  mvi m, 83
-  ; 1 ((uchar*)0xEF00)
-  inr l
-  mvi m, 35
-  ; 7 while((VG75[1] & 0x20) == 0); 
-l13:
-  lda 61185
-  ani 32
-  jnz l14
-  jmp l13
-l14:
-  ; 8 while((VG75[1] & 0x20) == 0); 
-l15:
-  lda 61185
-  ani 32
-  jnz l16
-  jmp l15
-l16:
-  ; 1 ((uchar*)0xF000)
-  lxi h, 61448
-  mvi m, 128
-  ; 1 ((uchar*)0xF000)
-  mvi l, 4
-  mvi m, 255
-  ; 1 ((uchar*)0xF000)
-  mvi m, 192
-  ; 1 ((uchar*)0xF000)
-  inr l
-  mvi m, 0
-  ; 1 ((uchar*)0xF000)
-  mvi m, 79
-  ; 1 ((uchar*)0xF000)
-  mvi l, 8
-  mvi m, 164
-  ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 
- ei 
-  ; 15 asm { di } 
-  pop b
-  ret
-  ; --- apogeyScreen2a -----------------------------------------------------------------
-apogeyScreen2a:
-  push b
-  ; 3 memset((uchar*)MEM_ADDR, 0, (HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+2); 
-  lxi h, 57808
-  shld memset_1
-  xra a
-  sta memset_2
-  lxi h, 2333
-  call memset
-  ; 4 for(v=(uchar*)(MEM_ADDR)-1, i=TOP_INVISIBLE; i; --i) 
-  lxi b, 57807
-  mvi a, 3
-  sta apogeyScreen2a_i
-l19:
-  ; convertToConfition
-  lda apogeyScreen2a_i
-  ora a
-  jz l20
-  ; 5 v+=2, *v = 0xF1; Сложение BC с константой 2
-  inx b
-  inx b
-  mvi a, 241
-  stax b
-l21:
-  lxi h, apogeyScreen2a_i
-  dcr m
-  jmp l19
-l20:
-  ; 6 if(FILL_EOL) 7 for(i = HEIGHT; i; --i) 
-  mvi a, 31
-  sta apogeyScreen2a_i
-l23:
-  ; convertToConfition
-  lda apogeyScreen2a_i
-  ora a
-  jz l24
-  ; 8 v += (BPL), *v = 0xF1; Сложение с BC
-  lxi h, 75
-  dad b
-  mov b, h
-  mov c, l
-  mvi a, 241
-  stax b
-l25:
-  lxi h, apogeyScreen2a_i
-  dcr m
-  jmp l23
-l24:
-  ; 9 ((uchar*)MEM_ADDR)[(HEIGHT)*(BPL)+(TOP_INVISIBLE)*2+1] = 0xFF; 
-  lxi h, 60140
-  mvi m, 255
-  ; 10 apogeyVideoMem = (uchar*)(MEM_ADDR) + (TOP_INVISIBLE)*2 + 9; 
-  lxi h, 57823
-  shld apogeyVideoMem
-  ; 11 apogeyVideoBpl = (BPL); 
-  mvi a, 75
-  sta apogeyVideoBpl
-  ; 1 ((uchar*)0xEF00)
-  lxi h, 61185
-  mvi m, 0
-  ; 1 ((uchar*)0xEF00)
-  dcr l
-  mvi m, 77
-  ; 1 ((uchar*)0xEF00)
-  mvi m, 100
-  ; 1 ((uchar*)0xEF00)
-  mvi m, 119
-  ; 1 ((uchar*)0xEF00)
-  mvi m, 83
-  ; 1 ((uchar*)0xEF00)
-  inr l
-  mvi m, 35
-  ; 7 while((VG75[1] & 0x20) == 0); 
-l32:
-  lda 61185
-  ani 32
-  jnz l33
-  jmp l32
-l33:
-  ; 8 while((VG75[1] & 0x20) == 0); 
-l34:
-  lda 61185
-  ani 32
-  jnz l35
-  jmp l34
-l35:
-  ; 1 ((uchar*)0xF000)
-  lxi h, 61448
-  mvi m, 128
-  ; 1 ((uchar*)0xF000)
-  mvi l, 4
-  mvi m, 208
-  ; 1 ((uchar*)0xF000)
-  mvi m, 225
-  ; 1 ((uchar*)0xF000)
-  inr l
-  mvi m, 28
-  ; 1 ((uchar*)0xF000)
-  mvi m, 73
-  ; 1 ((uchar*)0xF000)
-  mvi l, 8
-  mvi m, 164
-  ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 15 asm { di } 
- di 
-  pop b
-  ret
-  ; --- apogeyScreen0 -----------------------------------------------------------------
-apogeyScreen0:
-  push b
-  ; 3 memset((uchar*)(MEM_ADDR), 0, (FULL_HEIGHT)*(BPL)); 
-  lxi h, 57808
-  shld memset_1
-  xra a
-  sta memset_2
-  lxi h, 2340
-  call memset
-  ; 4 if(FILL_EOL) { 5 v = (uchar*)(MEM_ADDR)-1; 9 apogeyVideoMem = (uchar*)(MEM_ADDR) + (TOP_INVISIBLE)*(BPL) + ((HIDDEN_ATTRIB) ? 9 : 8); 
-  lxi h, 58050
-  shld apogeyVideoMem
-  ; 10 apogeyVideoBpl = (BPL); 
-  mvi a, 78
-  sta apogeyVideoBpl
-  ; 1 ((uchar*)0xEF00)
-  lxi h, 61185
-  mvi m, 0
-  ; 1 ((uchar*)0xEF00)
-  dcr l
-  mvi m, 77
-  ; 1 ((uchar*)0xEF00)
-  mvi m, 29
-  ; 1 ((uchar*)0xEF00)
-  mvi m, 153
-  ; 1 ((uchar*)0xEF00)
-  mvi m, 211
-  ; 1 ((uchar*)0xEF00)
-  inr l
-  mvi m, 35
-  ; 7 while((VG75[1] & 0x20) == 0); 
-l50:
-  lda 61185
-  ani 32
-  jnz l51
-  jmp l50
-l51:
-  ; 8 while((VG75[1] & 0x20) == 0); 
-l52:
-  lda 61185
-  ani 32
-  jnz l53
-  jmp l52
-l53:
-  ; 1 ((uchar*)0xF000)
-  lxi h, 61448
-  mvi m, 128
-  ; 1 ((uchar*)0xF000)
-  mvi l, 4
-  mvi m, 208
-  ; 1 ((uchar*)0xF000)
-  mvi m, 225
-  ; 1 ((uchar*)0xF000)
-  inr l
-  mvi m, 35
-  ; 1 ((uchar*)0xF000)
-  mvi m, 73
-  ; 1 ((uchar*)0xF000)
-  mvi l, 8
-  mvi m, 164
-  ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 15 asm { di } 
- di 
-  pop b
-  ret
-  ; --- fs_open0 -----------------------------------------------------------------
-fs_open0:
-  sta fs_open0_2
-  ; 5 asm {      
-      
-    PUSH B
-    ; a = fs_open0_2
-    MOV  D, A 
-    LHLD fs_open0_1
-    MVI  A, 2
-    CALL fs_entry
-    POP  B
-  
-  ret
   ; --- memset -----------------------------------------------------------------
 memset:
   shld memset_3
@@ -1055,6 +1394,33 @@ memset_l2:
     pop b
   
   ret
+  ; --- fs_open0 -----------------------------------------------------------------
+fs_open0:
+  sta fs_open0_2
+  ; 5 asm {      
+      
+    PUSH B
+    ; a = fs_open0_2
+    MOV  D, A 
+    LHLD fs_open0_1
+    MVI  A, 2
+    CALL fs_entry
+    POP  B
+  
+  ret
+VG75:
+ .dw $+2
+ .ds 1
+VT57:
+ .dw $+2
+ .ds 1
+apogeyVideoMem:
+ .dw $+2
+ .ds 1
+apogeyVideoBpl:
+ .ds 1
+ScreenStartPointer:
+ .dw $+2
 main_i:
  .ds 2
 main_j:
@@ -1064,8 +1430,6 @@ main_c:
 main_FifoReadPointer:
  .ds 2
 main_FifoWritePointer:
- .ds 2
-main_ScreenStartPointer:
  .ds 2
 main_iNumberOfFrames:
  .ds 2
@@ -1087,6 +1451,18 @@ main_Fifo_Read_Threshold_1:
  .ds 1
 main_Fifo_Read_Threshold_2:
  .ds 1
+main_Fifo_Read_Threshold_3:
+ .ds 1
+apogey_hires_i:
+ .ds 1
+apogey_lores_i:
+ .ds 1
+radio_lores_i:
+ .ds 1
+apogey_stdmode_i:
+ .ds 1
+rk_stdmode_i:
+ .ds 1
 fs_cmdLine:
  .dw $+2
  .ds 1
@@ -1101,28 +1477,16 @@ fs_addr:
  .ds 1
 fs_open_1:
  .ds 2
-apogeyScreen3a_i:
- .ds 1
-apogeyScreen2a_i:
- .ds 1
-apogeyScreen0_i:
- .ds 1
-fs_open0_1:
- .ds 2
-fs_open0_2:
- .ds 1
 memset_1:
  .ds 2
 memset_2:
  .ds 1
 memset_3:
  .ds 2
-apogeyVideoMem:
- .dw 58050
-
-apogeyVideoBpl:
- .db 78
-
+fs_open0_1:
+ .ds 2
+fs_open0_2:
+ .ds 1
 string0:
  .db 86,73,68,69,79,47,65,80,80,76,69,46,65,80,86,0
   .end
