@@ -162,7 +162,8 @@ Machine_Test_Done:
     MVI  A, 004h;read command
 	CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
 	LHLD main_FifoReadPointer
-	MOV A,H
+	INX H
+	MOV A,M
 	STA main_Screen_Type
 	CPI 0h
 	JNZ SetScreen128x60
@@ -413,27 +414,27 @@ str_Unknown_Machine:	.db "UNKNOWN MACHINE",0
 
 void apogey_hires() {
   APOGEY_SCREEN_ECONOMY(0xC100,64, 51, 7, 0x33, 75, 1, 0, 1);
-  ScreenStartPointer = (void*)0xC113;
+  ScreenStartPointer = (void*)0xC116;
 }
 
 void apogey_lores() {
   APOGEY_SCREEN_ECONOMY(0xE1D0, 37, 31, 3, 0x77, 75, 1, 0, 0);
-  ScreenStartPointer = (void*)0xE1DA;
+  ScreenStartPointer = (void*)0xE1DF;
 }	
 
 void radio_lores() {
   APOGEY_SCREEN_ECONOMY(0x76D0, 37, 31, 3, 0x77, 75, 1, 0, 0);
-  ScreenStartPointer = (void*)0x76DA;
+  ScreenStartPointer = (void*)0x76DF;
 }	
 
 void apogey_stdmode() {
   APOGEY_SCREEN_STD(0xE1D0, 30, 25, 3, 0x99, 78, 0, 0, 0);
-  ScreenStartPointer = (void*)0xE1DA;
+  ScreenStartPointer = (void*)0xE1DF;
 }	
 
 void rk_stdmode() {
   APOGEY_SCREEN_STD(0x76D0, 30, 25, 3, 0x99, 78, 0, 0, 0);
-  ScreenStartPointer = (void*)0x76DA;
+  ScreenStartPointer = (void*)0x76DF;
 }	
 	
 	

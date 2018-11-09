@@ -131,30 +131,31 @@ Machine_Test_Done:
     MVI  A, 004h;read command
 	CALL fs_entry ; HL-размер, DE-адрес / HL-сколько загрузили, A-код ошибки
 	LHLD main_FifoReadPointer
-	MOV A,H
+	INX H
+	MOV A,M
 	STA main_Screen_Type
 	CPI 0h
 	JNZ SetScreen128x60
 SetScreen192x102:
 	
-  ; 171 apogey_hires();
+  ; 172 apogey_hires();
   call apogey_hires
-  ; 173 asm {
+  ; 174 asm {
 	JMP SetScreenDone
 SetScreen128x60:
 	LDA main_Machine_Type
 	CPI 0 ;is apogey?
 	JNZ SetScreen128x60_Radio
 	
-  ; 180 apogey_lores();
+  ; 181 apogey_lores();
   call apogey_lores
-  ; 182 asm{
+  ; 183 asm{
 	JMP SetScreenDone
 SetScreen128x60_Radio:
 	
-  ; 186 radio_lores();
+  ; 187 radio_lores();
   call radio_lores
-  ; 190 asm
+  ; 191 asm
 SetScreenDone:
 	LHLD main_FifoReadPointer
 	LXI D,4
@@ -165,7 +166,7 @@ SetScreenDone:
 	XCHG
 	SHLD main_iNumberOfFrames
   
-  ; 204 asm {
+  ; 205 asm {
 	  LHLD main_FifoWritePointer
 	  XCHG
 	  LXI H, 03000h ; размер передачи 12k
@@ -176,10 +177,10 @@ SetScreenDone:
 	  DAD D
 	  SHLD main_FifoWritePointer
   
-  ; 216 iFrameCounter = iNumberOfFrames;
+  ; 217 iFrameCounter = iNumberOfFrames;
   lhld main_iNumberOfFrames
   shld main_iFrameCounter
-  ; 218 asm{
+  ; 219 asm{
 Main_Loop_Start:
 	LHLD main_iFrameCounter
 	XRA A ; A=0
@@ -356,7 +357,7 @@ Fifo_Read_Do2:
 
 Do_Exit:
   
-  ; 396 asm{
+  ; 397 asm{
 	LDA main_Machine_Type
 	CPI 0 ;is apogey?
 	JNZ Do_Exit_Radio
@@ -366,7 +367,7 @@ Do_Exit_Radio:
 	call rk_stdmode
 	JMP 0F875h ;jump to monitor	
 	
-  ; 407 asm{
+  ; 408 asm{
 str_Unknown_Machine:	.db "UNKNOWN MACHINE",0
 	
   ret
@@ -500,8 +501,8 @@ l16:
   mvi m, 164
   ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 
  ei 
-  ; 15 asm { di } 416 ScreenStartPointer = (void*)0xC113;
-  lxi h, 49427
+  ; 15 asm { di } 417 ScreenStartPointer = (void*)0xC116;
+  lxi h, 49430
   shld ScreenStartPointer
   pop b
   ret
@@ -635,8 +636,8 @@ l35:
   mvi m, 164
   ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 15 asm { di } 
  di 
-  ; 421 ScreenStartPointer = (void*)0xE1DA;
-  lxi h, 57818
+  ; 422 ScreenStartPointer = (void*)0xE1DF;
+  lxi h, 57823
   shld ScreenStartPointer
   pop b
   ret
@@ -770,8 +771,8 @@ l54:
   mvi m, 164
   ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 15 asm { di } 
  di 
-  ; 426 ScreenStartPointer = (void*)0x76DA;
-  lxi h, 30426
+  ; 427 ScreenStartPointer = (void*)0x76DF;
+  lxi h, 30431
   shld ScreenStartPointer
   pop b
   ret
@@ -863,8 +864,8 @@ l72:
   mvi m, 164
   ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 15 asm { di } 
  di 
-  ; 431 ScreenStartPointer = (void*)0xE1DA;
-  lxi h, 57818
+  ; 432 ScreenStartPointer = (void*)0xE1DF;
+  lxi h, 57823
   shld ScreenStartPointer
   pop b
   ret
@@ -956,8 +957,8 @@ l90:
   mvi m, 164
   ; 15 if(CHAR_GEN) asm { ei } else asm { di } 15 asm { ei } else asm { di } 15 asm { di } 
  di 
-  ; 436 ScreenStartPointer = (void*)0x76DA;
-  lxi h, 30426
+  ; 437 ScreenStartPointer = (void*)0x76DF;
+  lxi h, 30431
   shld ScreenStartPointer
   pop b
   ret
